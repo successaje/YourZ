@@ -1,14 +1,55 @@
-# YourZ - NFT Blogging Platform
+YourZ 🌟
+Tokenize Your Words, Own Your Influence
+YourZ is a next-generation blogging platform built on Zora Protocol, where every post becomes a collectible NFT. Writers monetize their content directly, and readers invest in ideas by owning tokenized posts—earning royalties when others discover and collect them.
 
-A Medium-style blogging platform where every post is minted as an NFT, built on Zora Protocol.
+✨ Key Features
+1. Tokenized Blog Posts
+Every article is minted as an ERC-721 NFT (Zora Protocol).
 
-## Features
+Set your own mint price & royalties (e.g., 10% on resales).
 
-- Write and publish blog posts as NFTs
-- Collect posts and earn royalties
-- Co-author posts with revenue splits
-- Token-gated features for NFT holders
-- Modern, responsive UI
+Posts are stored permanently on IPFS (decentralized storage).
+
+2. Invest in Content You Love
+Readers collect posts like digital assets.
+
+Earn passive income from secondary sales (royalty shares).
+
+Trade valuable posts like NFT trading cards.
+
+3. Collaborative Writing
+Co-author posts with revenue splits (Zora’s SplitMain).
+
+Multi-signature publishing for teams.
+
+4. Web3-Native Experience
+No emails/passwords—sign in with your Ethereum wallet (MetaMask, Rainbow, etc.).
+
+ENS integration (yourname.eth as your identity).
+
+Token-gated discussions (only NFT holders can comment).
+
+5. Creator & Supporter Dashboard
+Track earnings from primary sales & royalties.
+
+See which posts are trending.
+
+Manage collaborations & splits.
+
+🚀 How It Works
+For Writers
+Write – Compose in a clean, Medium-style editor.
+
+Mint – Turn your post into an NFT (set price & royalties).
+
+Earn – Get paid when readers collect or resell your work.
+
+For Readers
+Discover – Browse tokenized posts.
+
+Collect – Buy posts you believe in.
+
+Profit – Earn royalties if the post gains value.
 
 ## Tech Stack
 
