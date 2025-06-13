@@ -6,6 +6,9 @@ import { useAccount } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import type { Post } from '@/types'
 import PostCard from '@/components/PostCard'
+import { HeroIllustration } from '@/components/HeroIllustration'
+import { BannerSlider } from '@/components/BannerSlider'
+import { RecommendedArtists } from '@/components/RecommendedArtists'
 
 // Mock data for demonstration
 const featuredPosts: Post[] = [
@@ -44,50 +47,101 @@ const categories = [
   { name: 'Writing', count: 48 },
 ]
 
-export default function HomePage() {
+type FilterType = 'featured' | 'latest' | 'popular' | 'following'
+
+export default function Home() {
   const { address } = useAccount()
-  const [activeTab, setActiveTab] = useState<'featured' | 'latest'>('featured')
+  const [activeFilter, setActiveFilter] = useState<FilterType>('featured')
+
+  const filters = [
+    { id: 'featured', label: 'Featured Posts' },
+    { id: 'latest', label: 'Latest Posts' },
+    { id: 'popular', label: 'Popular Posts' },
+    { id: 'following', label: 'Following' }
+  ] as const
 
   return (
-    <div className="space-y-8">
-      {/* Hero Section */}
-      <div className="bg-white dark:bg-dark-200 rounded-xl shadow-sm border border-gray-100 dark:border-dark-300 p-8">
-        <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-            Welcome to YourZ
-          </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">
-            A Medium-style blogging platform where every post is minted as an NFT
-          </p>
-          <div className="flex justify-center space-x-4">
-            <button className="btn-primary">Start Writing</button>
-            <button className="btn-secondary">Learn More</button>
-          </div>
+    <main className="flex-1">
+      {/* Banner Section */}
+      <section className="w-full bg-gradient-to-r from-primary/10 via-purple-500/10 to-blue-500/10 dark:from-primary/5 dark:via-purple-500/5 dark:to-blue-500/5 border-b border-gray-200 dark:border-gray-800">
+        <div className="container mx-auto px-4 py-8">
+          <BannerSlider />
         </div>
-      </div>
+      </section>
 
-      {/* Featured Section */}
-      <div className="bg-white dark:bg-dark-200 rounded-xl shadow-sm border border-gray-100 dark:border-dark-300 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Featured Posts</h2>
-          <div className="flex space-x-2">
-            <button className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-300 rounded-lg hover:bg-gray-200 dark:hover:bg-dark-400 transition-colors">
-              Latest
-            </button>
-            <button className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-300 rounded-lg hover:bg-gray-200 dark:hover:bg-dark-400 transition-colors">
-              Popular
-            </button>
-            <button className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-300 rounded-lg hover:bg-gray-200 dark:hover:bg-dark-400 transition-colors">
-              Following
-            </button>
+      {/* Main Content */}
+      <section className="py-12">
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            {/* Left Column - Main Content */}
+            <div className="lg:col-span-3 space-y-8">
+              {/* Filter Section */}
+              <div className="flex items-center space-x-4 mb-8 overflow-x-auto pb-2">
+                {filters.map((filter) => (
+                  <button
+                    key={filter.id}
+                    onClick={() => setActiveFilter(filter.id)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap
+                      ${activeFilter === filter.id 
+                        ? 'bg-primary text-white shadow-md shadow-primary/20 dark:shadow-primary/10' 
+                        : 'bg-white dark:bg-dark-200 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-primary/50 dark:hover:border-primary/50'
+                      }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Content Area */}
+              <div className="p-6">
+                {activeFilter === 'featured' && (
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {featuredPosts.map((post) => (
+                      <PostCard key={post.id} post={post} />
+                    ))}
+                  </div>
+                )}
+                {activeFilter === 'latest' && (
+                  <div className="space-y-6">
+                    {/* Latest post cards will go here */}
+                  </div>
+                )}
+                {activeFilter === 'popular' && (
+                  <div className="space-y-6">
+                    {/* Popular post cards will go here */}
+                  </div>
+                )}
+                {activeFilter === 'following' && (
+                  <div className="space-y-6">
+                    {/* Following post cards will go here */}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right Column - Recommended Artists */}
+            <div className="lg:col-span-1">
+              <div className="sticky top-24 space-y-6">
+                {/* Create Button */}
+                <Link
+                  href="/write"
+                  className="block w-full bg-blue-600 hover:bg-blue-700 text-white text-center py-3 px-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200"
+                >
+                  ✍️ Start Creating
+                </Link>
+
+                {/* Recommended Artists */}
+                <div className="bg-white dark:bg-dark-200 rounded-xl shadow-sm border border-gray-100 dark:border-dark-300 p-6">
+                  <h2 className="text-xl font-display font-bold text-gray-900 dark:text-white mb-6">
+                    Recommended Artists
+                  </h2>
+                  <RecommendedArtists />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {featuredPosts.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
-        </div>
-      </div>
-    </div>
+      </section>
+    </main>
   )
 } 

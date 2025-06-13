@@ -27,11 +27,13 @@ export interface Post {
 
 export interface PostMetadata {
   title: string
-  description: string
-  image?: string
-  content: string
-  author: Author
-  coAuthors?: Author[]
-  createdAt: Date
-  tags: string[]
+  mintPrice: number
+  royaltyBps: number
+  coverImage: string | null
+  createdAt?: Date
+  author?: {
+    address: string
+    name: string
+  }
+  tags?: string[]
 } 

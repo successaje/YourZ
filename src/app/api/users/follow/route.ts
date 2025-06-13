@@ -1,9 +1,26 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const supabase = createClient(supabaseUrl, supabaseKey)
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  throw new Error('Missing env.NEXT_PUBLIC_SUPABASE_URL')
+}
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('Missing env.SUPABASE_SERVICE_ROLE_KEY')
+}
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    },
+    db: {
+      schema: 'public'
+    }
+  }
+)
 
 export async function POST(request: Request) {
   try {
@@ -17,13 +34,13 @@ export async function POST(request: Request) {
     const { data: follower, error: followerError } = await supabase
       .from('users')
       .select('id')
-      .eq('address', followerAddress)
+      .eq('address', followerAddress.toLowerCase())
       .single()
 
     const { data: followed, error: followedError } = await supabase
       .from('users')
       .select('id')
-      .eq('address', followedAddress)
+      .eq('address', followedAddress.toLowerCase())
       .single()
 
     if (followerError || followedError) {
@@ -43,34 +60,29 @@ export async function POST(request: Request) {
     }
 
     if (existingFollow) {
-      // Unfollow
-      const { error: unfollowError } = await supabase
-        .from('user_followers')
-        .delete()
-        .eq('follower_id', follower.id)
-        .eq('followed_id', followed.id)
-
-      if (unfollowError) throw unfollowError
-
-      return NextResponse.json({ action: 'unfollowed' })
-    } else {
-      // Follow
-      const { error: followError } = await supabase
-        .from('user_followers')
-        .insert([
-          {
-            follower_id: follower.id,
-            followed_id: followed.id,
-            created_at: new Date().toISOString()
-          }
-        ])
-
-      if (followError) throw followError
-
-      return NextResponse.json({ action: 'followed' })
+      return NextResponse.json({ error: 'Already following this user' }, { status: 400 })
     }
+
+    // Create follow relationship
+    const { data: follow, error: followError } = await supabase
+      .from('user_followers')
+      .insert([
+        {
+          follower_id: follower.id,
+          followed_id: followed.id,
+          created_at: new Date().toISOString()
+        }
+      ])
+      .select()
+      .single()
+
+    if (followError) {
+      throw followError
+    }
+
+    return NextResponse.json(follow)
   } catch (error) {
-    console.error('Error in follow/unfollow:', error)
-    return NextResponse.json({ error: 'Failed to process follow/unfollow' }, { status: 500 })
+    console.error('Error following user:', error)
+    return NextResponse.json({ error: 'Failed to follow user' }, { status: 500 })
   }
 } 

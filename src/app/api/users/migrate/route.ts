@@ -2,9 +2,26 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import axios from 'axios'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const supabase = createClient(supabaseUrl, supabaseKey)
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  throw new Error('Missing env.NEXT_PUBLIC_SUPABASE_URL')
+}
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('Missing env.SUPABASE_SERVICE_ROLE_KEY')
+}
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    },
+    db: {
+      schema: 'public'
+    }
+  }
+)
 
 const PINATA_GATEWAY = process.env.NEXT_PUBLIC_PINATA_GATEWAY
 
@@ -19,7 +36,7 @@ export async function POST(request: Request) {
     const normalizedAddress = address.toLowerCase()
     console.log('Migrating user data for address:', normalizedAddress)
 
-    // Check if user already exists
+    // Check if user already exists in Supabase
     const { data: existingUser } = await supabase
       .from('users')
       .select('id')

@@ -4,8 +4,14 @@ import { Providers } from './providers'
 import Header from '../components/Header'
 import Script from 'next/script'
 import { Toaster } from 'react-hot-toast'
+import { Space_Grotesk } from 'next/font/google'
 
 const inter = Inter({ subsets: ['latin'] })
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  variable: '--font-space-grotesk',
+})
 
 export const metadata = {
   title: 'YourZ - Web3 Social Platform',
@@ -18,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={inter.className} suppressHydrationWarning>
+    <html lang="en" className={`${inter.className} ${spaceGrotesk.variable}`} suppressHydrationWarning>
       <head>
         <Script id="theme-script" strategy="beforeInteractive">
           {`

@@ -110,4 +110,65 @@ src/
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+"Don’t just read – own the posts you love and earn when others discover them. Be more than a fan: be a stakeholder."
+
+1. Creators Monetize Directly
+Problem: Platforms like Medium/Substack take cuts (10-50%) and lock creators into centralized systems.
+
+YourZ Solution:
+
+Every post is an ownable NFT (via Zora Protocol).
+
+Creators set their own mint price (e.g., 0.01 ETH per copy) and royalties (e.g., 10% on resales).
+
+No middlemen—earnings go straight to the creator’s wallet.
+
+2. Supporters Become Investors
+Problem: Readers’ attention fuels platforms but earns them nothing.
+
+YourZ Solution:
+
+Supporters buy tokenized posts (like early-stage investors).
+
+Earn royalties when others collect the same post later.
+
+Trade posts in a secondary market (e.g., rare viral articles gain value).
+
+3. Explicit Value Exchange
+Problem: Traditional platforms hide value flows behind ads/subscriptions.
+
+YourZ Solution:
+
+Transparent blockchain ledger shows exactly who earns what.
+
+Smart contracts enforce automatic payouts (no manual invoicing).
+
+4. Real Ownership
+Problem: Platforms can delete content or ban creators.
+
+YourZ Solution:
+
+Posts live on IPFS (decentralized storage).
+
+NFT ownership proves authenticity and provenance.
+
+🎯 Key Innovations vs. Traditional Platforms
+Feature	Traditional Platforms (Medium, Substack)	YourZ
+Revenue Model	Ads/subscriptions (platform takes cut)	NFT sales + royalties (creator keeps 90%+)
+Supporter Role	Passive consumer	Active investor/collector
+Ownership	Platform owns distribution rights	Creators/supporters own NFTs
+Censorship	Platform can remove content	Immutable (once minted)
+💡 Example Scenario
+Creator writes a post → Mints 100 copies at 0.01 ETH each.
+
+Early Supporter buys 1 copy (cost: 0.01 ETH).
+
+Post goes viral → Secondary market resells copies for 0.1 ETH each.
+
+Creator earns: 10% royalty on every resale (0.01 ETH).
+
+Supporter earns: If they resell, profit = sale price - mint price.
+
+"YourZ flips the script—readers aren’t just consumers, they’re stakeholders. Every interaction creates measurable value, captured on-chain."

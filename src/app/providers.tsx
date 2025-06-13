@@ -1,56 +1,21 @@
 'use client'
 
-import { getDefaultWallets, RainbowKitProvider } from '@rainbow-me/rainbowkit'
-import { configureChains, createConfig, WagmiConfig } from 'wagmi'
-import { mainnet, sepolia } from 'wagmi/chains'
-import { publicProvider } from 'wagmi/providers/public'
-import { jsonRpcProvider } from 'wagmi/providers/jsonRpc'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { WagmiProvider } from 'wagmi'
+import { RainbowKitProvider } from '@rainbow-me/rainbowkit'
+import { config } from '@/lib/wagmi'
 import '@rainbow-me/rainbowkit/styles.css'
 
-const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
-
-if (!projectId) {
-  throw new Error('Missing NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID')
-}
-
-const { chains, publicClient } = configureChains(
-  [mainnet, sepolia],
-  [
-    jsonRpcProvider({
-      rpc: (chain) => ({
-        http: `https://rpc.ankr.com/${chain.network}`,
-        webSocket: `wss://rpc.ankr.com/${chain.network}/ws`,
-      }),
-    }),
-    publicProvider()
-  ]
-)
-
-const { connectors } = getDefaultWallets({
-  appName: 'YourZ',
-  projectId,
-  chains,
-})
-
-const wagmiConfig = createConfig({
-  autoConnect: true,
-  connectors,
-  publicClient,
-})
+const queryClient = new QueryClient()
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <WagmiConfig config={wagmiConfig}>
-      <RainbowKitProvider 
-        chains={chains} 
-        modalSize="compact"
-        initialChain={sepolia}
-        showRecentTransactions={true}
-      >
-        <div className="min-h-screen bg-gray-50 dark:bg-dark-100 transition-colors duration-200">
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider chains={config.chains}>
           {children}
-        </div>
-      </RainbowKitProvider>
-    </WagmiConfig>
+        </RainbowKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
   )
 } 

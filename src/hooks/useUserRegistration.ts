@@ -4,75 +4,69 @@ import axios from 'axios'
 interface UserData {
   address: string
   username: string
-  email?: string
-  createdAt: string
+  email: string
 }
 
-interface UseUserRegistrationReturn {
-  registerUser: (data: Omit<UserData, 'createdAt'>) => Promise<void>
-  isRegistering: boolean
-  error: string | null
-}
-
-export function useUserRegistration(): UseUserRegistrationReturn {
-  const [isRegistering, setIsRegistering] = useState(false)
+export const useUserRegistration = () => {
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [user, setUser] = useState<UserData | null>(null)
 
-  const registerUser = async (data: Omit<UserData, 'createdAt'>) => {
-    setIsRegistering(true)
-    setError(null)
-
+  const registerUser = async (userData: UserData) => {
     try {
-      // Check if username is already taken
-      const usernameCheck = await fetch(`/api/users/check-username?username=${data.username}`)
-      const { isTaken } = await usernameCheck.json()
-
-      if (isTaken) {
-        throw new Error('Username is already taken')
-      }
-
-      // Prepare user data
-      const userData: UserData = {
-        ...data,
-        createdAt: new Date().toISOString(),
-      }
+      setIsLoading(true)
+      setError(null)
 
       // Upload to IPFS via Pinata
       const formData = new FormData()
       formData.append('file', new Blob([JSON.stringify(userData)], { type: 'application/json' }))
 
-      const response = await axios.post('https://api.pinata.cloud/pinning/pinFileToIPFS', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_PINATA_JWT}`
+      const pinataResponse = await axios.post(
+        'https://api.pinata.cloud/pinning/pinFileToIPFS',
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_PINATA_JWT}`,
+            'Content-Type': 'multipart/form-data'
+          }
         }
-      })
+      )
 
-      const ipfsHash = response.data.IpfsHash
+      const ipfsHash = pinataResponse.data.IpfsHash
 
-      // Store the IPFS hash in your backend
-      await fetch('/api/users/register', {
+      // Register user through API route
+      const response = await fetch('/api/users/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          address: data.address,
-          username: data.username,
-          ipfsHash,
+          ...userData,
+          ipfsHash
         }),
       })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to register user')
-      throw err
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to register user')
+      }
+
+      const newUser = await response.json()
+      setUser(newUser)
+      return newUser
+    } catch (error) {
+      console.error('Registration error:', error)
+      setError(error instanceof Error ? error.message : 'Failed to register user')
+      throw error
     } finally {
-      setIsRegistering(false)
+      setIsLoading(false)
     }
   }
 
   return {
     registerUser,
-    isRegistering,
+    isLoading,
     error,
+    user
   }
 } 

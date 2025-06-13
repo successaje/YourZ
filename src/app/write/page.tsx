@@ -3,81 +3,110 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { useZora } from '@/hooks/useZora'
-import { useIPFS } from '@/utils/ipfs'
+import { motion } from 'framer-motion'
 import PostEditor from '@/components/PostEditor'
+import { useUserProfile } from '@/hooks/useUserProfile'
+import { toast } from 'react-hot-toast'
+import { createBrowserClient } from '@supabase/ssr'
 
 export default function WritePage() {
   const router = useRouter()
   const { address } = useAccount()
-  const { createPost } = useZora()
-  const { uploadToIPFS } = useIPFS()
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { profile, isLoading: isLoadingProfile } = useUserProfile(address)
+  const [wordCount, setWordCount] = useState(0)
+  const [showNFTForm, setShowNFTForm] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
 
-  const handleSubmit = async (data: {
-    title: string
-    content: string
-    price: string
-  }) => {
-    if (!address) return
+  const handleSave = async (content: string, metadata: any) => {
+    if (!address) {
+      toast.error('Please connect your wallet first')
+      return
+    }
 
     try {
-      setIsSubmitting(true)
+      setIsSaving(true)
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
 
-      // Upload content to IPFS
-      const content = {
-        title: data.title,
-        content: data.content,
-        author: address,
-        timestamp: new Date().toISOString(),
+      // Get user profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('wallet_address', address)
+        .single()
+
+      if (profileError) {
+        console.error('Error fetching profile:', profileError)
+        throw new Error('Failed to fetch user profile')
       }
-      const uri = await uploadToIPFS(content)
 
-      // Create coin for the post
-      const contractCallParams = await createPost({
-        title: data.title,
-        content: data.content,
-        price: data.price,
-        uri,
-      })
+      if (!profile) {
+        throw new Error('User profile not found')
+      }
 
-      // Execute the transaction
-      const tx = await contractCallParams.write()
-      await tx.wait()
+      // Create post
+      const { data: post, error: postError } = await supabase
+        .from('posts')
+        .insert([
+          {
+            content,
+            metadata,
+            author_id: profile.id,
+            author_name: profile.name || 'Anonymous',
+            author_avatar: profile.avatar_url,
+            wallet_address: address,
+            status: 'published'
+          }
+        ])
+        .select()
+        .single()
 
-      router.push('/dashboard')
+      if (postError) {
+        console.error('Error creating post:', postError)
+        throw new Error('Failed to create post')
+      }
+
+      toast.success('Post published successfully!')
+      router.push(`/post/${post.id}`)
     } catch (error) {
-      console.error('Error creating post:', error)
-      alert('Failed to create post. Please try again.')
+      console.error('Error saving post:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to publish post')
     } finally {
-      setIsSubmitting(false)
+      setIsSaving(false)
     }
   }
 
-  if (!address) {
-    return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">
-              Connect your wallet to write
-            </h2>
-            <p className="text-gray-600 mb-8">
-              You need to connect your wallet to create and publish posts.
-            </p>
-            <ConnectButton />
+  return (
+    <div className="min-h-screen bg-white dark:bg-gray-900">
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <div className="flex items-center justify-end mb-8">
+          <div className="flex items-center space-x-4">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setShowNFTForm(false)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Publish
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setShowNFTForm(true)}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              Publish as NFT
+            </motion.button>
           </div>
         </div>
-      </div>
-    )
-  }
 
-  return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">Write a Post</h1>
-        <PostEditor onSubmit={handleSubmit} isSubmitting={isSubmitting} />
+        <PostEditor
+          onSave={handleSave}
+          onWordCountChange={setWordCount}
+          showNFTForm={showNFTForm}
+        />
       </div>
     </div>
   )

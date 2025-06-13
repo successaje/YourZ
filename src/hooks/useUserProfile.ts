@@ -75,5 +75,5 @@ export function useUserProfile(address?: string) {
     fetchProfile()
   }, [address])
 
-  return { profile, isLoading, error }
+  return { profile, setProfile, isLoading, error }
 } 
