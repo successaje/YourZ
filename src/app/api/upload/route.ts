@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ipfsClient } from '@/lib/ipfs';
+import { uploadToIPFS, uploadFileToIPFS } from '@/lib/ipfs';
 
 export async function POST(request: Request) {
   try {
@@ -13,14 +13,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Convert File to Buffer
+    // Convert file to buffer
     const buffer = await file.arrayBuffer();
-    const ipfsHash = await ipfsClient.uploadFile(Buffer.from(buffer));
+    const uint8Array = new Uint8Array(buffer);
 
-    // Return the IPFS URL
-    return NextResponse.json({
-      url: `https://ipfs.io/ipfs/${ipfsHash}`
-    });
+    // Upload to IPFS
+    const hash = await uploadFileToIPFS(file);
+
+    return NextResponse.json({ hash });
   } catch (error) {
     console.error('Error uploading file:', error);
     return NextResponse.json(

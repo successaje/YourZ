@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useAccount } from 'wagmi'
+import { toast } from 'react-hot-toast'
 
 interface UserStats {
   posts_count: number
@@ -8,30 +8,30 @@ interface UserStats {
   total_likes: number
 }
 
-interface SocialLinks {
-  twitter?: string
-  github?: string
-  discord?: string
-  medium?: string
-  mirror?: string
-  telegram?: string
-  instagram?: string
-  website?: string
+interface Post {
+  id: string
+  title: string
+  content: string
+  metadata: any
+  status: string
+  is_nft: boolean
+  created_at: string
+  updated_at: string
 }
 
 interface UserProfile {
   id: string
   address: string
   username: string
-  email: string
   ipfs_hash: string
   created_at: string
-  bio: string
+  updated_at: string
+  bio: string | null
   level: number
-  social_links: SocialLinks
-  followers_count: number
-  following_count: number
-  stats: UserStats
+  social_links: Record<string, string>
+  email: string | null
+  user_stats: UserStats
+  posts: Post[]
 }
 
 export function useUserProfile(address?: string) {
@@ -49,15 +49,10 @@ export function useUserProfile(address?: string) {
       try {
         console.log('Fetching profile for address:', address)
         const response = await fetch(`/api/users/profile?address=${address}`)
-        
+
         if (!response.ok) {
-          if (response.status === 404) {
-            // User not found, might need migration
-            setError(new Error('User not found. Please migrate your data.'))
-          } else {
-            throw new Error('Failed to fetch profile')
-          }
-          return
+          const error = await response.json()
+          throw new Error(error.error || 'Failed to fetch profile')
         }
 
         const data = await response.json()
@@ -67,6 +62,7 @@ export function useUserProfile(address?: string) {
       } catch (err) {
         console.error('Error fetching profile:', err)
         setError(err instanceof Error ? err : new Error('Failed to fetch profile'))
+        toast.error('Failed to load profile')
       } finally {
         setIsLoading(false)
       }
@@ -75,5 +71,52 @@ export function useUserProfile(address?: string) {
     fetchProfile()
   }, [address])
 
-  return { profile, setProfile, isLoading, error }
+  const updateProfile = async (data: Partial<UserProfile>) => {
+    if (!address) return
+
+    try {
+      const response = await fetch('/api/users/profile/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address, ...data })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update profile')
+      }
+
+      const updatedProfile = await response.json()
+      setProfile(updatedProfile)
+      toast.success('Profile updated successfully')
+      return updatedProfile
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to update profile')
+      toast.error(error.message)
+      throw error
+    }
+  }
+
+  const getPosts = () => {
+    return profile?.posts || []
+  }
+
+  const getStats = () => {
+    return profile?.user_stats || {
+      posts_count: 0,
+      collections_count: 0,
+      nfts_count: 0,
+      total_likes: 0
+    }
+  }
+
+  return {
+    profile,
+    setProfile,
+    isLoading,
+    error,
+    updateProfile,
+    getPosts,
+    getStats
+  }
 } 

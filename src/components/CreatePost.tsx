@@ -4,6 +4,9 @@ import { createCreatorClient } from "@zoralabs/protocol-sdk"
 import { useAccount, usePublicClient } from 'wagmi'
 import { useDropzone } from 'react-dropzone'
 import { toast } from 'react-hot-toast'
+import { createBrowserClient } from '@supabase/ssr'
+import { uploadToIPFS, uploadFileToIPFS } from '@/lib/ipfs'
+import { useUserProfile } from '@/hooks/useUserProfile'
 
 interface CreatePostProps {
   onSuccess?: () => void
@@ -18,6 +21,11 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
   const [coverImage, setCoverImage] = useState<File | null>(null)
   const { address } = useAccount()
   const publicClient = usePublicClient()
+  const { profile } = useUserProfile(address)
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 
   const { getRootProps, getInputProps } = useDropzone({
     accept: {
@@ -37,28 +45,32 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
 
     setIsLoading(true)
     try {
+      console.log('Starting post creation process...')
+      
       // 1. Upload content to IPFS
-      const contentBlob = new Blob([content], { type: 'text/markdown' })
-      const contentFormData = new FormData()
-      contentFormData.append('file', contentBlob, 'content.md')
-
-      const contentResponse = await fetch('/api/ipfs/upload', {
-        method: 'POST',
-        body: contentFormData
-      })
-      const { hash: contentHash } = await contentResponse.json()
+      console.log('Uploading content to IPFS...')
+      const contentData = {
+        content,
+        metadata: {
+          title,
+          author: {
+            name: profile?.name || 'Anonymous',
+            avatar: profile?.avatar_url,
+            wallet: address
+          },
+          createdAt: new Date().toISOString()
+        }
+      }
+      
+      const contentHash = await uploadToIPFS(contentData)
+      console.log('Content uploaded to IPFS:', contentHash)
 
       // 2. Upload cover image to IPFS if exists
       let imageHash = ''
       if (coverImage) {
-        const imageFormData = new FormData()
-        imageFormData.append('file', coverImage)
-        const imageResponse = await fetch('/api/ipfs/upload', {
-          method: 'POST',
-          body: imageFormData
-        })
-        const { hash } = await imageResponse.json()
-        imageHash = hash
+        console.log('Uploading cover image to IPFS...')
+        imageHash = await uploadFileToIPFS(coverImage)
+        console.log('Cover image uploaded to IPFS:', imageHash)
       }
 
       // 3. Create NFT metadata
@@ -76,16 +88,12 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
       }
 
       // 4. Upload metadata to IPFS
-      const metadataBlob = new Blob([JSON.stringify(metadata)], { type: 'application/json' })
-      const metadataFormData = new FormData()
-      metadataFormData.append('file', metadataBlob, 'metadata.json')
-      const metadataResponse = await fetch('/api/ipfs/upload', {
-        method: 'POST',
-        body: metadataFormData
-      })
-      const { hash: metadataHash } = await metadataResponse.json()
+      console.log('Uploading metadata to IPFS...')
+      const metadataHash = await uploadToIPFS(metadata)
+      console.log('Metadata uploaded to IPFS:', metadataHash)
 
       // 5. Create NFT using Zora
+      console.log('Creating NFT with Zora...')
       const creatorClient = createCreatorClient({ 
         chainId: publicClient.chain.id, 
         publicClient 
@@ -100,14 +108,52 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
         mintPrice: parseEther(mintPrice),
       })
 
-      // TODO: Handle the transaction
-      console.log('Create post parameters:', parameters)
+      console.log('NFT creation parameters:', parameters)
 
+      // 6. Save post to Supabase
+      console.log('Saving post to Supabase...')
+      const postData = {
+        title,
+        content,
+        metadata: {
+          ...metadata,
+          ipfsHash: contentHash,
+          ipfsUrl: `https://gateway.pinata.cloud/ipfs/${contentHash}`,
+          nftMetadata: {
+            hash: metadataHash,
+            url: `https://gateway.pinata.cloud/ipfs/${metadataHash}`,
+            parameters
+          }
+        },
+        author_id: profile?.id,
+        author_name: profile?.name || 'Anonymous',
+        author_avatar: profile?.avatar_url,
+        wallet_address: address,
+        status: 'published',
+        is_nft: true
+      }
+
+      const { data: post, error: postError } = await supabase
+        .from('posts')
+        .insert([postData])
+        .select()
+        .single()
+
+      if (postError) {
+        console.error('Error creating post in Supabase:', postError)
+        throw new Error(`Failed to create post: ${postError.message}`)
+      }
+
+      if (!post) {
+        throw new Error('Post was not created successfully')
+      }
+
+      console.log('Post created successfully:', post)
       toast.success('Post created successfully!')
       onSuccess?.()
     } catch (error) {
       console.error('Error creating post:', error)
-      toast.error('Failed to create post')
+      toast.error(error instanceof Error ? error.message : 'Failed to create post')
     } finally {
       setIsLoading(false)
     }

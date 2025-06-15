@@ -5,6 +5,7 @@ import Header from '../components/Header'
 import Script from 'next/script'
 import { Toaster } from 'react-hot-toast'
 import { Space_Grotesk } from 'next/font/google'
+import Navigation from '@/components/Navigation'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -14,8 +15,8 @@ const spaceGrotesk = Space_Grotesk({
 })
 
 export const metadata = {
-  title: 'YourZ - Web3 Social Platform',
-  description: 'A decentralized social platform for Web3 enthusiasts',
+  title: 'YourZ - Tokenize Your Words, Own Your Influence',
+  description: 'A next-generation blogging platform built on Zora Protocol, where every post becomes a collectible NFT.',
 }
 
 export default function RootLayout({
@@ -38,6 +39,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-gray-50 dark:bg-dark-100 transition-colors duration-200">
         <Providers>
+          <Navigation />
           <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-dark-100">
             <Header />
             <main className="flex-1 container mx-auto px-4 py-8 mt-16">

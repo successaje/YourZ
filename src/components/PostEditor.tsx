@@ -10,27 +10,32 @@ import { uploadToIPFS, uploadFileToIPFS } from '@/lib/ipfs'
 import type { PostMetadata } from '@/types/post'
 import { toast } from 'react-hot-toast'
 import { useDropzone } from 'react-dropzone'
-import { useUserProfile } from '@/hooks/useUserProfile'
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false })
 import 'react-quill/dist/quill.snow.css'
 
 interface PostEditorProps {
-  onSave: (metadata: PostMetadata, content: string) => Promise<void>
+  onSave: (content: string, metadata: PostMetadata) => Promise<void>
   onWordCountChange?: (count: number) => void
   showNFTForm?: boolean
+  setShowNFTForm?: (show: boolean) => void
+  isLoading?: boolean
 }
 
-export default function PostEditor({ onSave, onWordCountChange, showNFTForm = false }: PostEditorProps) {
+export default function PostEditor({ 
+  onSave, 
+  onWordCountChange, 
+  showNFTForm = false,
+  setShowNFTForm,
+  isLoading = false
+}: PostEditorProps) {
   const router = useRouter()
   const { address } = useAccount()
-  const { profile, isLoading: isLoadingProfile } = useUserProfile(address)
   const { mintPost } = useZora()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [newTag, setNewTag] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
   const [mintPrice, setMintPrice] = useState('0.01')
   const [royaltyBps, setRoyaltyBps] = useState('500') // 5%
   const [coverImage, setCoverImage] = useState<File | null>(null)
@@ -97,67 +102,45 @@ export default function PostEditor({ onSave, onWordCountChange, showNFTForm = fa
     setTags(tags.filter(tag => tag !== tagToRemove))
   }
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setIsLoading(true);
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to upload image');
-      }
-
-      const data = await response.json();
-      setCoverImage(data.url);
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      toast.error('Failed to upload image');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Starting handleSubmit in PostEditor');
     
     // Validate required fields
     if (!title.trim()) {
+      console.log('Title validation failed');
       toast.error('Please enter a title');
       return;
     }
     if (!content.trim()) {
+      console.log('Content validation failed');
       toast.error('Please enter some content');
       return;
     }
     if (showNFTForm) {
       if (!mintPrice || Number(mintPrice) <= 0) {
+        console.log('Mint price validation failed:', mintPrice);
         toast.error('Please enter a valid mint price');
         return;
       }
       if (!royaltyBps || Number(royaltyBps) < 0 || Number(royaltyBps) > 1000) {
+        console.log('Royalty validation failed:', royaltyBps);
         toast.error('Royalty must be between 0% and 10%');
         return;
       }
     }
+    console.log('All validations passed');
 
-    setIsLoading(true);
     try {
       let coverImageHash = null;
       if (showNFTForm && coverImage) {
         try {
+          console.log('Starting cover image upload to IPFS');
           coverImageHash = await uploadFileToIPFS(coverImage);
+          console.log('Cover image uploaded successfully, hash:', coverImageHash);
         } catch (error) {
           console.error('Error uploading cover image:', error);
           toast.error('Failed to upload cover image. Please try again.');
-          setIsLoading(false);
           return;
         }
       }
@@ -173,45 +156,15 @@ export default function PostEditor({ onSave, onWordCountChange, showNFTForm = fa
           coverImage: coverImageHash,
         }),
       };
+      console.log('Prepared metadata for save:', metadata);
 
-      let metadataURI;
-      try {
-        metadataURI = await uploadToIPFS(metadata);
-      } catch (error) {
-        console.error('Error uploading metadata:', error);
-        toast.error('Failed to upload post metadata. Please try again.');
-        setIsLoading(false);
-        return;
-      }
-
-      if (showNFTForm) {
-        try {
-          const { createNFT } = useZora();
-          const request = await createNFT({
-            name: title,
-            symbol: 'POST',
-            royaltyBps: Number(royaltyBps),
-            tokenURI: metadataURI,
-            mintPrice: mintPrice.toString(),
-          });
-
-          const hash = await request.write();
-          toast.success('Post published as NFT!');
-          onSave({ ...metadata, nftHash: hash });
-        } catch (error) {
-          console.error('Error creating NFT:', error);
-          toast.error('Failed to create NFT. Please try again.');
-          setIsLoading(false);
-          return;
-        }
-      } else {
-        onSave(metadata);
-      }
+      console.log('Calling onSave with content and metadata');
+      await onSave(content, metadata);
+      console.log('onSave completed successfully');
     } catch (error) {
-      console.error('Error publishing post:', error);
+      console.error('Error in handleSubmit:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace available');
       toast.error('An unexpected error occurred. Please try again.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -236,32 +189,13 @@ export default function PostEditor({ onSave, onWordCountChange, showNFTForm = fa
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-                {isLoadingProfile ? (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                  </div>
-                ) : profile?.avatar_url ? (
-                  <img
-                    src={profile.avatar_url}
-                    alt={profile.username}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
-                    {profile?.username?.[0] || 'A'}
-                  </div>
-                )}
+                <div className="w-full h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+                  {address?.slice(0, 1) || 'A'}
+                </div>
               </div>
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {isLoadingProfile ? (
-                  <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-                ) : (
-                  profile?.username || 'Anonymous'
-                )}
+                {address?.slice(0, 6)}...{address?.slice(-4)}
               </span>
-            </div>
-            <div className="px-3 py-1 text-sm text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-full">
-              {address?.slice(0, 6)}...{address?.slice(-4)}
             </div>
             <div className="px-3 py-1 text-sm text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-full">
               {new Date().toLocaleDateString()}
@@ -301,216 +235,8 @@ export default function PostEditor({ onSave, onWordCountChange, showNFTForm = fa
           />
         </div>
 
-        {/* Cover Image Upload */}
-        {showNFTForm && (
-          <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Cover Image
-            </label>
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-700 border-dashed rounded-lg">
-              <div className="space-y-1 text-center">
-                {isLoading ? (
-                  <div className="flex flex-col items-center justify-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 dark:border-blue-400"></div>
-                    <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Uploading image...</p>
-                  </div>
-                ) : coverImage ? (
-                  <div className="relative">
-                    <img
-                      src={coverImage}
-                      alt="Cover preview"
-                      className="mx-auto h-32 w-auto object-cover rounded-lg"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setCoverImage('')}
-                      className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <svg
-                      className="mx-auto h-12 w-12 text-gray-400"
-                      stroke="currentColor"
-                      fill="none"
-                      viewBox="0 0 48 48"
-                      aria-hidden="true"
-                    >
-                      <path
-                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                        strokeWidth={2}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <div className="flex text-sm text-gray-600 dark:text-gray-400">
-                      <label
-                        htmlFor="cover-image"
-                        className="relative cursor-pointer bg-white dark:bg-gray-800 rounded-md font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
-                      >
-                        <span>Upload a file</span>
-                        <input
-                          id="cover-image"
-                          name="cover-image"
-                          type="file"
-                          className="sr-only"
-                          accept="image/*"
-                          onChange={handleImageUpload}
-                          disabled={isLoading}
-                        />
-                      </label>
-                      <p className="pl-1">or drag and drop</p>
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      PNG, JPG, GIF up to 10MB
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Rich Text Editor */}
         <div className="prose dark:prose-invert max-w-none">
-          <style jsx global>{`
-            .ql-toolbar {
-              border: none !important;
-              padding: 0 !important;
-              margin-bottom: 1rem !important;
-              background: transparent !important;
-              border-bottom: 1px solid #e5e7eb !important;
-              padding-bottom: 0.75rem !important;
-            }
-            .dark .ql-toolbar {
-              border-bottom-color: #374151 !important;
-            }
-            .ql-container {
-              border: none !important;
-              font-size: 1.125rem !important;
-              line-height: 1.75 !important;
-              margin-top: 1rem !important;
-            }
-            .ql-editor {
-              padding: 0 !important;
-              min-height: 400px !important;
-            }
-            .ql-editor p {
-              margin-bottom: 1.5rem !important;
-            }
-            .ql-editor h1, .ql-editor h2, .ql-editor h3 {
-              margin-top: 2rem !important;
-              margin-bottom: 1rem !important;
-            }
-            .ql-editor ul, .ql-editor ol {
-              margin-bottom: 1.5rem !important;
-            }
-            .ql-editor blockquote {
-              border-left: 4px solid #e5e7eb !important;
-              padding-left: 1rem !important;
-              margin: 1.5rem 0 !important;
-              color: #6b7280 !important;
-            }
-            .ql-editor a {
-              color: #2563eb !important;
-              text-decoration: underline !important;
-            }
-            .ql-editor img {
-              margin: 1.5rem 0 !important;
-              border-radius: 0.5rem !important;
-            }
-            .ql-editor pre {
-              background: #f3f4f6 !important;
-              padding: 1rem !important;
-              border-radius: 0.5rem !important;
-              margin: 1.5rem 0 !important;
-            }
-            .ql-editor code {
-              background: #f3f4f6 !important;
-              padding: 0.2rem 0.4rem !important;
-              border-radius: 0.25rem !important;
-              font-size: 0.875em !important;
-            }
-            .ql-editor.ql-blank::before {
-              color: #9ca3af !important;
-              font-style: normal !important;
-            }
-            .ql-toolbar button {
-              color: #4b5563 !important;
-            }
-            .ql-toolbar button:hover {
-              color: #2563eb !important;
-            }
-            .ql-toolbar button.ql-active {
-              color: #2563eb !important;
-            }
-            .ql-toolbar .ql-stroke {
-              stroke: currentColor !important;
-            }
-            .ql-toolbar .ql-fill {
-              fill: currentColor !important;
-            }
-            .ql-toolbar .ql-picker {
-              color: #4b5563 !important;
-            }
-            .ql-toolbar .ql-picker-options {
-              background-color: white !important;
-              border: 1px solid #e5e7eb !important;
-              border-radius: 0.5rem !important;
-              box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1) !important;
-            }
-            .ql-toolbar .ql-picker-item {
-              color: #4b5563 !important;
-            }
-            .ql-toolbar .ql-picker-item.ql-selected {
-              color: #2563eb !important;
-            }
-            .ql-toolbar .ql-picker-item:hover {
-              color: #2563eb !important;
-            }
-            .dark .ql-editor blockquote {
-              border-left-color: #374151 !important;
-              color: #9ca3af !important;
-            }
-            .dark .ql-editor a {
-              color: #60a5fa !important;
-            }
-            .dark .ql-editor pre {
-              background: #1f2937 !important;
-            }
-            .dark .ql-editor code {
-              background: #1f2937 !important;
-            }
-            .dark .ql-toolbar button {
-              color: #9ca3af !important;
-            }
-            .dark .ql-toolbar button:hover {
-              color: #60a5fa !important;
-            }
-            .dark .ql-toolbar button.ql-active {
-              color: #60a5fa !important;
-            }
-            .dark .ql-toolbar .ql-picker {
-              color: #9ca3af !important;
-            }
-            .dark .ql-toolbar .ql-picker-options {
-              background-color: #1f2937 !important;
-              border-color: #374151 !important;
-            }
-            .dark .ql-toolbar .ql-picker-item {
-              color: #9ca3af !important;
-            }
-            .dark .ql-toolbar .ql-picker-item.ql-selected {
-              color: #60a5fa !important;
-            }
-            .dark .ql-toolbar .ql-picker-item:hover {
-              color: #60a5fa !important;
-            }
-          `}</style>
           <ReactQuill
             value={content}
             onChange={setContent}

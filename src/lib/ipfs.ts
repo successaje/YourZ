@@ -12,7 +12,7 @@ const createIPFSClient = () => {
   }
 
   return {
-    upload: async (data: any) => {
+    uploadJSON: async (data: any) => {
       if (!pinataApiKey || !pinataSecretKey) {
         throw new Error('Pinata credentials are not configured. Please check your environment variables.');
       }
@@ -96,18 +96,18 @@ const createIPFSClient = () => {
 // Create a singleton instance
 const ipfsClient = createIPFSClient();
 
-export async function uploadToIPFS(data: any): Promise<string> {
-  return ipfsClient.upload(data);
-}
+export const uploadToIPFS = async (data: any): Promise<string> => {
+  return ipfsClient.uploadJSON(data);
+};
 
-export async function uploadFileToIPFS(file: File): Promise<string> {
+export const uploadFileToIPFS = async (file: File): Promise<string> => {
   return ipfsClient.uploadFile(file);
-}
+};
 
-export async function getFromIPFS(hash: string): Promise<any> {
+export const getFromIPFS = async (hash: string): Promise<any> => {
   return ipfsClient.get(hash);
-}
+};
 
 export function getIPFSGatewayURL(hash: string): string {
-  return `https://ipfs.io/ipfs/${hash}`
+  return `https://gateway.pinata.cloud/ipfs/${hash}`;
 } 

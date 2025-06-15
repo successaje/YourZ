@@ -1,113 +1,188 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
-import { motion } from 'framer-motion'
-import PostEditor from '@/components/PostEditor'
-import { useUserProfile } from '@/hooks/useUserProfile'
+import { createClient } from '@supabase/supabase-js'
 import { toast } from 'react-hot-toast'
-import { createBrowserClient } from '@supabase/ssr'
+import PostEditor from '@/components/PostEditor'
+import { motion } from 'framer-motion'
 
 export default function WritePage() {
   const router = useRouter()
-  const { address } = useAccount()
-  const { profile, isLoading: isLoadingProfile } = useUserProfile(address)
-  const [wordCount, setWordCount] = useState(0)
+  const { address, isConnected } = useAccount()
+  const [isLoading, setIsLoading] = useState(false)
   const [showNFTForm, setShowNFTForm] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    if (!isConnected) {
+      router.push('/')
+    }
+  }, [isConnected, router])
 
   const handleSave = async (content: string, metadata: any) => {
     if (!address) {
-      toast.error('Please connect your wallet first')
+      toast.error('Please connect your wallet')
       return
     }
 
+    console.log('Starting handleSave with:', { content, metadata, address, showNFTForm })
+    setIsLoading(true)
+
     try {
-      setIsSaving(true)
-      const supabase = createBrowserClient(
+      // Create Supabase client
+      const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
 
-      // Get user profile
+      // First, get or create user profile
+      console.log('Fetching user profile for address:', address)
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
-        .eq('wallet_address', address)
+        .ilike('address', address)
         .single()
 
-      if (profileError) {
-        console.error('Error fetching profile:', profileError)
-        throw new Error('Failed to fetch user profile')
-      }
+      console.log('Profile fetch response:', { profile, profileError })
+
+      let userId = profile?.id
 
       if (!profile) {
-        throw new Error('User profile not found')
+        console.log('Profile not found, creating new profile...')
+        // Create new user profile
+        const { data: newUser, error: createUserError } = await supabase
+          .from('users')
+          .insert({
+            address: address.toLowerCase(),
+            username: `user_${address.slice(0, 6)}`,
+            ipfs_hash: '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single()
+
+        if (createUserError) {
+          console.error('Error creating user:', createUserError)
+          throw new Error(`Failed to create user profile: ${createUserError.message}`)
+        }
+
+        if (!newUser) {
+          throw new Error('Failed to create user profile: No user data returned')
+        }
+
+        userId = newUser.id
+
+        // Create user stats
+        const { error: statsError } = await supabase
+          .from('user_stats')
+          .insert({
+            id: newUser.id,
+            address: newUser.address,
+            posts_count: 0,
+            collections_count: 0,
+            nfts_count: 0,
+            total_likes: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+
+        if (statsError) {
+          console.error('Error creating user stats:', statsError)
+          throw new Error(`Failed to create user stats: ${statsError.message}`)
+        }
       }
 
-      // Create post
+      if (!userId) {
+        throw new Error('No user ID available for post creation')
+      }
+
+      // Create the post
+      console.log('Creating post with data:', {
+        title: metadata.title,
+        content: content,
+        metadata: metadata,
+        author_id: userId,
+        author_name: profile?.username || `user_${address.slice(0, 6)}`,
+        address: address.toLowerCase(),
+        status: 'published',
+        is_nft: showNFTForm,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+
       const { data: post, error: postError } = await supabase
         .from('posts')
-        .insert([
-          {
-            content,
-            metadata,
-            author_id: profile.id,
-            author_name: profile.name || 'Anonymous',
-            author_avatar: profile.avatar_url,
-            wallet_address: address,
-            status: 'published'
-          }
-        ])
+        .insert({
+          title: metadata.title,
+          content: content,
+          metadata: metadata,
+          author_id: userId,
+          author_name: profile?.username || `user_${address.slice(0, 6)}`,
+          address: address.toLowerCase(),
+          status: 'published',
+          is_nft: showNFTForm,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
         .select()
         .single()
 
       if (postError) {
         console.error('Error creating post:', postError)
-        throw new Error('Failed to create post')
+        throw new Error(`Failed to create post: ${postError.message}`)
+      }
+
+      if (!post) {
+        throw new Error('Post was not created successfully')
+      }
+
+      // Update user stats
+      const { error: updateStatsError } = await supabase
+        .from('user_stats')
+        .update({ 
+          posts_count: supabase.rpc('increment', { x: 1 }),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+
+      if (updateStatsError) {
+        console.error('Error updating user stats:', updateStatsError)
+        // Don't throw here, as the post was created successfully
       }
 
       toast.success('Post published successfully!')
       router.push(`/post/${post.id}`)
     } catch (error) {
-      console.error('Error saving post:', error)
+      console.error('Error in handleSave:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to publish post')
+      throw error // Re-throw to let PostEditor know about the error
     } finally {
-      setIsSaving(false)
+      setIsLoading(false)
     }
   }
 
-  return (
-    <div className="min-h-screen bg-white dark:bg-gray-900">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-end mb-8">
-          <div className="flex items-center space-x-4">
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setShowNFTForm(false)}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              Publish
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setShowNFTForm(true)}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              Publish as NFT
-            </motion.button>
-          </div>
-        </div>
+  if (!isConnected) {
+    return null
+  }
 
-        <PostEditor
-          onSave={handleSave}
-          onWordCountChange={setWordCount}
-          showNFTForm={showNFTForm}
-        />
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800"
+    >
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
+          <PostEditor 
+            onSave={handleSave}
+            isLoading={isLoading}
+            showNFTForm={showNFTForm}
+            setShowNFTForm={setShowNFTForm}
+          />
+        </div>
       </div>
-    </div>
+    </motion.div>
   )
 } 

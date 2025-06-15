@@ -1,35 +1,72 @@
 'use client'
 
-import { useUserProfile } from '@/hooks/useUserProfile'
 import { useAccount } from 'wagmi'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { PlaceholderAvatar } from '@/components/PlaceholderAvatar'
-import { FaTwitter, FaGithub, FaDiscord, FaMedium, FaLink, FaTelegram, FaInstagram, FaNewspaper, FaEdit } from 'react-icons/fa'
+import { FaTwitter, FaGithub, FaDiscord, FaMedium, FaLink, FaTelegram, FaInstagram, FaNewspaper, FaEdit, FaHeart, FaUsers, FaBookmark, FaShare, FaClock } from 'react-icons/fa'
 import { SiMirror } from 'react-icons/si'
 import { toast } from 'react-hot-toast'
 import EditProfileModal from '@/components/EditProfileModal'
-import { motion } from 'framer-motion'
 import ZoraIntegration from '@/components/ZoraIntegration'
 import CreatePost from '@/components/CreatePost'
 import { Toaster } from 'react-hot-toast'
+import PostCard from '@/components/PostCard'
+import Link from 'next/link'
+import PostListItem from '@/components/PostListItem'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+interface User {
+  id: string
+  address: string
+  username: string
+  ipfs_hash: string
+  created_at: string
+  bio: string | null
+  level: number
+  social_links: Record<string, string>
+  email: string
+  updated_at: string
+  user_stats: any[]
+  posts: any[]
+}
+
+interface Post {
+  id: string
+  title: string
+  content: string
+  created_at: string
+}
 
 export default function ProfilePage() {
-  const { address, isConnected } = useAccount()
+  const { address: connectedAddress, isConnected } = useAccount()
   const router = useRouter()
-  const { profile, isLoading, error, setProfile } = useUserProfile(address)
+  const searchParams = useSearchParams()
   const [isFollowing, setIsFollowing] = useState(false)
   const [isFollowLoading, setIsFollowLoading] = useState(false)
   const [isMigrating, setIsMigrating] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [activeTab, setActiveTab] = useState('posts')
   const [isCreatingPost, setIsCreatingPost] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [posts, setPosts] = useState<Post[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Get address from URL parameters
+  const address = searchParams.get('address')
   
   // Debug logs
-  console.log('Current address:', address)
-  console.log('Profile data:', profile)
+  console.log('URL address:', address)
+  console.log('Connected address:', connectedAddress)
+  console.log('User data:', user)
 
-  const isOwnProfile = address?.toLowerCase() === profile?.address?.toLowerCase()
+  const isOwnProfile = connectedAddress?.toLowerCase() === address?.toLowerCase()
 
   useEffect(() => {
     if (!isConnected) {
@@ -39,9 +76,9 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const checkFollowStatus = async () => {
-      if (!address || !profile || isOwnProfile) return
+      if (!connectedAddress || !user || isOwnProfile) return
       try {
-        const response = await fetch(`/api/users/follow/status?followerAddress=${address}&followedAddress=${profile.address}`)
+        const response = await fetch(`/api/users/follow/status?followerAddress=${connectedAddress}&followedAddress=${user.address}`)
         if (response.ok) {
           const data = await response.json()
           setIsFollowing(data.isFollowing)
@@ -51,16 +88,16 @@ export default function ProfilePage() {
       }
     }
     checkFollowStatus()
-  }, [address, profile, isOwnProfile])
+  }, [connectedAddress, user, isOwnProfile])
 
   const handleFollow = async () => {
-    if (!address || !profile || isOwnProfile) return
+    if (!connectedAddress || !user || isOwnProfile) return
     setIsFollowLoading(true)
     try {
       const response = await fetch('/api/users/follow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ followerAddress: address, followedAddress: profile.address })
+        body: JSON.stringify({ followerAddress: connectedAddress, followedAddress: user.address })
       })
       if (response.ok) {
         setIsFollowing(!isFollowing)
@@ -72,45 +109,14 @@ export default function ProfilePage() {
     }
   }
 
-  // Add migration function
-  const migrateUserData = async () => {
-    if (!address) return
-    
-    setIsMigrating(true)
-    try {
-      const response = await fetch('/api/users/migrate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          address,
-          ipfsHash: 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG' // Replace with your actual IPFS hash
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Migration failed')
-      }
-
-      // Refresh the page to load the new data
-      window.location.reload()
-    } catch (error) {
-      console.error('Migration error:', error)
-      toast.error('Failed to migrate user data')
-    } finally {
-      setIsMigrating(false)
-    }
-  }
-
   const handleSaveProfile = async (data: any) => {
-    if (!address) return
+    if (!connectedAddress) return
     try {
-      console.log('Sending profile update request:', { address, data })
+      console.log('Sending profile update request:', { address: connectedAddress, data })
       const response = await fetch('/api/users/profile/update', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address, ...data })
+        body: JSON.stringify({ address: connectedAddress, ...data })
       })
 
       const responseData = await response.json()
@@ -120,7 +126,7 @@ export default function ProfilePage() {
         throw new Error(responseData.details || responseData.error || 'Failed to update profile')
       }
 
-      setProfile(responseData)
+      setUser(responseData)
       setIsEditing(false)
       toast.success('Profile updated successfully')
     } catch (error) {
@@ -130,30 +136,96 @@ export default function ProfilePage() {
     }
   }
 
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (!address) {
+        setError('No address provided')
+        setIsLoading(false)
+        return
+      }
+
+      try {
+        // Fetch user data with stats and posts
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select(`
+            *,
+            user_stats!user_stats_address_fkey (
+              id,
+              posts_count,
+              collections_count,
+              nfts_count,
+              total_likes
+            ),
+            posts:posts!posts_address_fkey (
+              id,
+              title,
+              content,
+              metadata,
+              status,
+              is_nft,
+              created_at,
+              updated_at
+            )
+          `)
+          .eq('address', address.toLowerCase())
+          .single()
+
+        if (userError) {
+          console.error('Error fetching user:', userError)
+          throw userError
+        }
+
+        if (!userData) {
+          console.log('No user data found for address:', address)
+          setError('User not found')
+          setIsLoading(false)
+          return
+        }
+
+        console.log('User data found:', userData)
+        setUser(userData)
+        setPosts(userData.posts || [])
+      } catch (err) {
+        console.error('Error in fetchUserData:', err)
+        setError('Failed to load profile')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchUserData()
+  }, [address])
+
   if (!isConnected) {
     return (
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800"
-      >
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="text-center">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Connect Your Wallet</h2>
             <p className="text-gray-600 dark:text-gray-400">Please connect your wallet to view your profile</p>
           </div>
         </div>
-      </motion.div>
+      </div>
     )
   }
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="animate-pulse space-y-4">
-            <div className="h-48 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
-            <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="animate-pulse space-y-8">
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+              <div className="space-y-2">
+                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-48"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -163,17 +235,23 @@ export default function ProfilePage() {
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Error Loading Profile</h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">Please try again later</p>
-            <button
-              onClick={migrateUserData}
-              disabled={isMigrating}
-              className="bg-primary text-white px-6 py-3 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-            >
-              {isMigrating ? 'Migrating...' : 'Migrate User Data'}
-            </button>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Profile Not Found</h2>
+            <p className="text-gray-600 dark:text-gray-400">{error}</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Profile Not Found</h2>
+            <p className="text-gray-600 dark:text-gray-400">The requested profile could not be found.</p>
           </div>
         </div>
       </div>
@@ -181,268 +259,168 @@ export default function ProfilePage() {
   }
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800"
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+      {/* Banner Section */}
+      <div className="relative h-48 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/40 to-transparent"></div>
+      </div>
+
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-16 relative z-10">
         {/* Profile Header */}
-        <motion.div 
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden mb-8"
-        >
-          {/* Banner */}
-          <div className="relative h-48 bg-gradient-to-r from-blue-500 to-purple-600">
-            <div className="absolute inset-0 bg-black/20"></div>
-            <motion.div 
-              className="absolute inset-0"
-              animate={{ 
-                background: [
-                  'linear-gradient(45deg, rgba(59, 130, 246, 0.5) 0%, rgba(147, 51, 234, 0.5) 100%)',
-                  'linear-gradient(45deg, rgba(147, 51, 234, 0.5) 0%, rgba(59, 130, 246, 0.5) 100%)'
-                ]
-              }}
-              transition={{ duration: 10, repeat: Infinity, repeatType: "reverse" }}
-            />
-          </div>
-
-          {/* Profile Content */}
-          <div className="relative px-6 py-8">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-              {/* Avatar */}
-              <div className="relative -mt-20 sm:-mt-24">
-                <div className="relative">
-                  <PlaceholderAvatar
-                    address={address}
-                    name={profile?.username || 'Anonymous'}
-                    size={160}
-                    className="border-4 border-white dark:border-gray-800 rounded-full shadow-lg"
-                  />
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="absolute bottom-0 right-0 bg-white dark:bg-gray-800 text-primary border-2 border-primary p-2 rounded-full hover:bg-primary hover:text-white transition-all duration-200 shadow-lg"
-                    title="Edit Profile"
-                  >
-                    <FaEdit className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              
-              <div className="flex-1">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                      {profile?.username || 'Anonymous'}
-                    </h1>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">
-                      {profile?.address?.slice(0, 6)}...{profile?.address?.slice(-4)}
-                    </p>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 mb-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <PlaceholderAvatar
+                address={user.address}
+                name={user.username}
+                size={80}
+                className="rounded-full ring-4 ring-white dark:ring-gray-800"
+              />
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {user.username}
+                </h1>
+                <p className="text-gray-500 dark:text-gray-400 mt-1">
+                  {user.address.slice(0, 6)}...{user.address.slice(-4)}
+                </p>
+                {user.bio && (
+                  <p className="text-gray-600 dark:text-gray-300 mt-4">
+                    {user.bio}
+                  </p>
+                )}
+                {/* Followers and Following */}
+                <div className="flex gap-6 mt-4">
+                  <div className="flex items-center gap-2">
+                    <FaUsers className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                    <div>
+                      <span className="font-medium text-gray-900 dark:text-white">0</span>
+                      <span className="text-gray-500 dark:text-gray-400 ml-1">Followers</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    {isOwnProfile ? (
-                      <>
-                        <motion.button
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => setIsEditing(true)}
-                          className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                        >
-                          Edit Profile
-                        </motion.button>
-                        <motion.button
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => {/* TODO: Add write post handler */}}
-                          className="px-4 py-2 text-sm font-medium text-black dark:text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
-                        >
-                          Start Writing
-                        </motion.button>
-                      </>
-                    ) : (
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={handleFollow}
-                        disabled={isFollowLoading}
-                        className={`px-6 py-2 rounded-full font-medium transition-colors duration-200 ${
-                          isFollowing
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-600'
-                            : 'bg-primary text-white hover:bg-primary/90'
-                        }`}
-                      >
-                        {isFollowLoading ? 'Loading...' : isFollowing ? 'Following' : 'Follow'}
-                      </motion.button>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <FaUsers className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                    <div>
+                      <span className="font-medium text-gray-900 dark:text-white">0</span>
+                      <span className="text-gray-500 dark:text-gray-400 ml-1">Following</span>
+                    </div>
                   </div>
                 </div>
-                
-                {profile?.bio && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="mt-4 max-w-2xl"
-                  >
-                    <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                      {profile.bio}
-                    </p>
-                  </motion.div>
-                )}
-
-                {/* Quick Actions */}
-                {isOwnProfile && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
-                    className="mt-6 flex flex-wrap gap-3"
-                  >
-                    <ZoraIntegration />
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => {/* TODO: Add create collection handler */}}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      Create Collection
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => {/* TODO: Add share profile handler */}}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      Share Profile
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => {/* TODO: Add invite friends handler */}}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      Invite Friends
-                    </motion.button>
-                  </motion.div>
-                )}
-
-                {/* Social Links */}
-                {profile?.social_links && Object.values(profile.social_links).some(link => link) && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
-                    className="mt-4 flex flex-wrap gap-3"
-                  >
-                    {profile.social_links.twitter && (
-                      <a href={profile.social_links.twitter} target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary transition-colors">
-                        <FaTwitter className="w-5 h-5" />
-                      </a>
-                    )}
-                    {profile.social_links.github && (
-                      <a href={profile.social_links.github} target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary transition-colors">
-                        <FaGithub className="w-5 h-5" />
-                      </a>
-                    )}
-                    {profile.social_links.discord && (
-                      <a href={profile.social_links.discord} target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary transition-colors">
-                        <FaDiscord className="w-5 h-5" />
-                      </a>
-                    )}
-                    {profile.social_links.medium && (
-                      <a href={profile.social_links.medium} target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary transition-colors">
-                        <FaMedium className="w-5 h-5" />
-                      </a>
-                    )}
-                    {profile.social_links.telegram && (
-                      <a href={profile.social_links.telegram} target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary transition-colors">
-                        <FaTelegram className="w-5 h-5" />
-                      </a>
-                    )}
-                    {profile.social_links.instagram && (
-                      <a href={profile.social_links.instagram} target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary transition-colors">
-                        <FaInstagram className="w-5 h-5" />
-                      </a>
-                    )}
-                    {profile.social_links.website && (
-                      <a href={profile.social_links.website} target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary transition-colors">
-                        <FaLink className="w-5 h-5" />
-                      </a>
-                    )}
-                  </motion.div>
-                )}
               </div>
             </div>
-          </div>
-        </motion.div>
-
-        {/* Stats Section */}
-        <motion.div 
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="flex items-center gap-8 mb-8"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-semibold text-gray-900 dark:text-white">{profile?.stats?.posts_count || 0}</span>
-            <span className="text-gray-500 dark:text-gray-400">Posts</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-semibold text-gray-900 dark:text-white">{profile?.followers_count || 0}</span>
-            <span className="text-gray-500 dark:text-gray-400">Followers</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-semibold text-gray-900 dark:text-white">{profile?.following_count || 0}</span>
-            <span className="text-gray-500 dark:text-gray-400">Following</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-semibold text-gray-900 dark:text-white">{profile?.stats?.total_likes || 0}</span>
-            <span className="text-gray-500 dark:text-gray-400">Likes</span>
-          </div>
-        </motion.div>
-
-        {/* Content Tabs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="mt-8"
-        >
-          <div className="flex space-x-4 border-b border-gray-200 dark:border-gray-800">
-            {['posts', 'collections', 'activities', 'drafts'].map((tab) => (
+            {isOwnProfile && (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
-                  activeTab === tab
-                    ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
+                onClick={() => setIsEditing(true)}
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
               >
-                {tab}
+                <FaEdit className="w-4 h-4 mr-2" />
+                Edit Profile
               </button>
-            ))}
+            )}
           </div>
 
-          {/* Tab Content */}
+          {/* User Stats */}
+          {user.user_stats && (
+            <div className="mt-6 grid grid-cols-4 gap-4">
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {user.user_stats.posts_count || 0}
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">Posts</div>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {user.user_stats.collections_count || 0}
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">Collections</div>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {user.user_stats.nfts_count || 0}
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">NFTs</div>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {user.user_stats.total_likes || 0}
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">Likes</div>
+              </div>
+            </div>
+          )}
+
+          {/* Social Links */}
+          {user.social_links && Object.keys(user.social_links).length > 0 && (
+            <div className="mt-6 flex gap-4">
+              {user.social_links.twitter && (
+                <a
+                  href={user.social_links.twitter}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                >
+                  <FaTwitter className="w-5 h-5" />
+                </a>
+              )}
+              {user.social_links.github && (
+                <a
+                  href={user.social_links.github}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                >
+                  <FaGithub className="w-5 h-5" />
+                </a>
+              )}
+              {/* Add other social links similarly */}
+            </div>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <div className="mt-8">
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <nav className="-mb-px flex space-x-8">
+                <button
+                  onClick={() => setActiveTab('posts')}
+                  className={`${
+                    activeTab === 'posts'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                >
+                  Posts
+                </button>
+                <button
+                  onClick={() => setActiveTab('collections')}
+                  className={`${
+                    activeTab === 'collections'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                >
+                  Collections
+                </button>
+              </nav>
+              {isOwnProfile && activeTab === 'posts' && (
+                <Link href="/write">
+                  <button
+                    className="inline-flex items-center px-4 py-2 text-sm font-bold text-gray-900 dark:text-white bg-primary hover:bg-primary/90 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors shadow-sm [text-shadow:_0_1px_1px_rgba(255,255,255,0.8)] dark:[text-shadow:_0_1px_1px_rgba(0,0,0,0.4)]"
+                  >
+                    <FaNewspaper className="w-4 h-4 mr-2" />
+                    Create Post
+                  </button>
+                </Link>
+              )}
+            </div>
+          </div>
+
           <div className="mt-6">
             {activeTab === 'posts' && (
               <div className="space-y-6">
-                {isOwnProfile && (
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => setIsCreatingPost(true)}
-                      className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    >
-                      Create Post
-                    </button>
-                  </div>
-                )}
-                
-                {profile?.posts?.length === 0 ? (
-                  <div className="text-center py-12">
+                {!user.posts || user.posts.length === 0 ? (
+                  <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
                     <p className="text-gray-500 dark:text-gray-400">
                       {isOwnProfile
                         ? "You haven't created any posts yet. Start sharing your thoughts!"
@@ -450,36 +428,113 @@ export default function ProfilePage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {/* Post cards will go here */}
+                  <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {user.posts.map((post: any) => (
+                      <div 
+                        key={post.id}
+                        className="py-6 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                      >
+                        <Link href={`/posts/${post.id}`} className="block">
+                          <div className="px-4">
+                            {/* Header with profile and metadata */}
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center space-x-3">
+                                <PlaceholderAvatar
+                                  address={user.address}
+                                  name={user.username}
+                                  size={40}
+                                  className="rounded-full"
+                                />
+                                <div>
+                                  <h4 className="font-medium text-gray-900 dark:text-white">
+                                    {user.username}
+                                  </h4>
+                                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    {new Date(post.created_at).toLocaleDateString()}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-4">
+                                {post.is_nft && (
+                                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary/10 text-primary">
+                                    <FaBookmark className="w-4 h-4 mr-1" />
+                                    NFT
+                                  </span>
+                                )}
+                                <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
+                                  <span className="flex items-center">
+                                    <FaShare className="w-4 h-4 mr-1" />
+                                    Share
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Main content */}
+                            <div className="flex gap-6">
+                              <div className="flex-1">
+                                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3 line-clamp-2">
+                                  {post.title}
+                                </h3>
+                                <div 
+                                  className="text-gray-600 dark:text-gray-300 line-clamp-3 prose dark:prose-invert max-w-none mb-4"
+                                  dangerouslySetInnerHTML={{ __html: post.content }}
+                                />
+                                <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+                                  <span className="flex items-center gap-1">
+                                    <FaNewspaper className="w-4 h-4" />
+                                    {post.status === 'published' ? 'Published' : 'Draft'}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <FaClock className="w-4 h-4" />
+                                    {new Date(post.updated_at).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end gap-4">
+                                {post.metadata?.cover_image && (
+                                  <div className="flex-shrink-0 w-32 h-32 relative">
+                                    <img
+                                      src={post.metadata.cover_image}
+                                      alt={post.title}
+                                      className="w-full h-full object-cover rounded-lg"
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent rounded-lg flex items-end justify-center p-2">
+                                      <span className="text-white text-sm font-medium">YourZ</span>
+                                    </div>
+                                  </div>
+                                )}
+                                <div className="flex-shrink-0 w-32 h-32 relative bg-gradient-to-br from-primary/30 via-primary/20 to-primary/10 rounded-lg p-4 flex flex-col items-center justify-center text-center border border-primary/20 shadow-sm">
+                                  <div className="text-2xl font-bold text-primary mb-2">YourZ</div>
+                                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                                    Write, Mint & Earn
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </Link>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             )}
           </div>
-        </motion.div>
+        </div>
 
         {/* Edit Profile Modal */}
         {isEditing && (
           <EditProfileModal
-            profile={profile}
+            isOpen={isEditing}
+            profile={user}
             onClose={() => setIsEditing(false)}
-            onUpdate={setProfile}
-          />
-        )}
-
-        {/* Create Post Modal */}
-        {isCreatingPost && (
-          <CreatePost
-            onSuccess={() => {
-              setIsCreatingPost(false)
-              // Refresh posts
-            }}
+            onSave={handleSaveProfile}
           />
         )}
 
         <Toaster position="bottom-right" />
       </div>
-    </motion.div>
+    </div>
   )
 } 

@@ -13,7 +13,15 @@ export const config = createConfig({
   connectors: [
     injected(),
     metaMask(),
-    walletConnect({ projectId }),
+    walletConnect({
+      projectId,
+      metadata: {
+        name: 'YourZ',
+        description: 'YourZ - Web3 Content Platform',
+        url: 'https://yourz.xyz',
+        icons: ['https://yourz.xyz/icon.png']
+      }
+    }),
   ],
   transports: {
     [mainnet.id]: http('https://rpc.ankr.com/eth'),

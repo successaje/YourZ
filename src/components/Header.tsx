@@ -13,6 +13,11 @@ export default function Header() {
   const pathname = usePathname()
   const [showRegistration, setShowRegistration] = useState(false)
   const [isRegistered, setIsRegistered] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   useEffect(() => {
     const checkUserRegistration = async () => {
@@ -37,6 +42,11 @@ export default function Header() {
   const handleRegistrationSuccess = () => {
     setShowRegistration(false)
     setIsRegistered(true)
+  }
+
+  // Don't render anything until after hydration
+  if (!isMounted) {
+    return null
   }
 
   return (
@@ -85,7 +95,7 @@ export default function Header() {
               <ThemeToggle />
               {address && isRegistered && (
                 <Link
-                  href="/profile"
+                  href={`/profile?address=${address}`}
                   className={`text-sm font-medium ${
                     pathname === '/profile'
                       ? 'text-primary-500'
