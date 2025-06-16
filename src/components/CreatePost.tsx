@@ -7,6 +7,8 @@ import { toast } from 'react-hot-toast'
 import { createBrowserClient } from '@supabase/ssr'
 import { uploadToIPFS, uploadFileToIPFS } from '@/lib/ipfs'
 import { useUserProfile } from '@/hooks/useUserProfile'
+import { parseEther } from 'viem'
+import { UserProfile } from '@/types/index'
 
 interface CreatePostProps {
   onSuccess?: () => void
@@ -19,9 +21,12 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
   const [mintPrice, setMintPrice] = useState('0.01')
   const [royaltyBps, setRoyaltyBps] = useState('1000') // 10%
   const [coverImage, setCoverImage] = useState<File | null>(null)
+  const [isNFT, setIsNFT] = useState<boolean>(false)
+
   const { address } = useAccount()
   const publicClient = usePublicClient()
-  const { profile } = useUserProfile(address)
+  const { profile: profileData } = useUserProfile(address)
+  const profile = profileData || null
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -37,6 +42,8 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
     }
   })
 
+  
+
   const handleCreatePost = async () => {
     if (!address || !publicClient || !title || !content) {
       toast.error('Please fill in all required fields')
@@ -47,15 +54,15 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
     try {
       console.log('Starting post creation process...')
       
-      // 1. Upload content to IPFS
+      // Upload content to IPFS
       console.log('Uploading content to IPFS...')
       const contentData = {
         content,
         metadata: {
           title,
           author: {
-            name: profile?.name || 'Anonymous',
-            avatar: profile?.avatar_url,
+            name: profile?.username || 'Anonymous',
+            avatar: profile?.ipfs_hash,
             wallet: address
           },
           createdAt: new Date().toISOString()
@@ -65,7 +72,7 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
       const contentHash = await uploadToIPFS(contentData)
       console.log('Content uploaded to IPFS:', contentHash)
 
-      // 2. Upload cover image to IPFS if exists
+      // Upload cover image to IPFS if exists
       let imageHash = ''
       if (coverImage) {
         console.log('Uploading cover image to IPFS...')
@@ -73,65 +80,127 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
         console.log('Cover image uploaded to IPFS:', imageHash)
       }
 
-      // 3. Create NFT metadata
-      const metadata = {
-        name: title,
-        description: content.substring(0, 200) + '...',
-        image: imageHash ? `ipfs://${imageHash}` : undefined,
-        content: `ipfs://${contentHash}`,
-        attributes: [
-          {
-            trait_type: "Type",
-            value: "Post"
-          }
-        ]
+      if (isNFT) {
+        // Create NFT metadata and upload
+        console.log('Creating NFT...')
+        const metadata: Record<string, any> = {
+          name: title,
+          description: content.substring(0, 200) + '...',
+          image: imageHash ? `ipfs://${imageHash}` : undefined,
+          content: `ipfs://${contentHash}`,
+          attributes: [
+            {
+              trait_type: "Type",
+              value: "Post"
+            }
+          ]
+        };
+
+        // Upload metadata to IPFS
+        console.log('Uploading metadata to IPFS...')
+        const metadataHash = await uploadToIPFS(metadata)
+        console.log('Metadata uploaded to IPFS:', metadataHash)
+
+        // Create NFT using Zora
+        console.log('Creating NFT with Zora...')
+        const creatorClient = createCreatorClient({ 
+          chainId: publicClient.chain.id, 
+          publicClient 
+        })
+
+const { parameters } = await creatorClient.create1155({
+          contract: {
+            name: title,
+            symbol: "POST",
+            royaltyBps: parseInt(royaltyBps),
+            royaltyRecipient: profile?.address || address,
+            tokenURI: `ipfs://${metadataHash}`,
+          },
+          mintPrice: parseEther(mintPrice),
+          account: address,
+        });
+
+        console.log('NFT creation parameters:', parameters)
+
+        // Prepare NFT post data
+        const postData = {
+          title,
+          content,
+          metadata: {
+            ...metadata,
+            ipfsHash: contentHash,
+            ipfsUrl: `https://gateway.pinata.cloud/ipfs/${contentHash}`,
+            nftMetadata: {
+              hash: metadataHash,
+              url: `https://gateway.pinata.cloud/ipfs/${metadataHash}`,
+              parameters
+            }
+          },
+          author_id: profile?.id,
+          author_name: profile?.username || 'Anonymous',
+          author_avatar: profile?.ipfs_hash,
+          wallet_address: profile?.address,
+          mint_price: mintPrice,
+          royalty_bps: royaltyBps,
+          token_id: null,
+          contract_address: null,
+          ipfs_hash: contentHash,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          status: 'published'
+        };
+
+        const { data: post, error: postError } = await supabase
+          .from('posts')
+          .insert([postData])
+          .select()
+          .single()
+
+        if (postError) {
+          console.error('Error creating NFT post in Supabase:', postError)
+          throw new Error(`Failed to create NFT post: ${postError.message}`)
+        }
+
+        if (!post) {
+          throw new Error('NFT post was not created successfully')
+        }
+
+        console.log('NFT post created successfully:', post)
+        toast.success('NFT post created successfully!')
+        onSuccess?.()
+        return
       }
 
-      // 4. Upload metadata to IPFS
-      console.log('Uploading metadata to IPFS...')
-      const metadataHash = await uploadToIPFS(metadata)
-      console.log('Metadata uploaded to IPFS:', metadataHash)
-
-      // 5. Create NFT using Zora
-      console.log('Creating NFT with Zora...')
-      const creatorClient = createCreatorClient({ 
-        chainId: publicClient.chain.id, 
-        publicClient 
-      })
-
-      const { parameters } = await creatorClient.create1155({
-        name: title,
-        symbol: "POST",
-        royaltyBps: parseInt(royaltyBps),
-        royaltyRecipient: address,
-        tokenURI: `ipfs://${metadataHash}`,
-        mintPrice: parseEther(mintPrice),
-      })
-
-      console.log('NFT creation parameters:', parameters)
-
-      // 6. Save post to Supabase
-      console.log('Saving post to Supabase...')
-      const postData = {
+      // Prepare regular post data
+      const postData: Record<string, any> = {
         title,
         content,
+        is_nft: false,
         metadata: {
-          ...metadata,
+          title,
+          content,
+          author: {
+            name: profile?.username || 'Anonymous',
+            avatar: profile?.ipfs_hash,
+            wallet: profile?.address
+          },
+          createdAt: new Date().toISOString(),
           ipfsHash: contentHash,
-          ipfsUrl: `https://gateway.pinata.cloud/ipfs/${contentHash}`,
-          nftMetadata: {
-            hash: metadataHash,
-            url: `https://gateway.pinata.cloud/ipfs/${metadataHash}`,
-            parameters
-          }
+          ipfsUrl: `https://gateway.pinata.cloud/ipfs/${contentHash}`
         },
         author_id: profile?.id,
-        author_name: profile?.name || 'Anonymous',
-        author_avatar: profile?.avatar_url,
-        wallet_address: address,
-        status: 'published',
-        is_nft: true
-      }
+        author_name: profile?.username || 'Anonymous',
+        author_avatar: profile?.ipfs_hash,
+        wallet_address: profile?.address,
+        mint_price: null,
+        royalty_bps: null,
+        token_id: null,
+        contract_address: null,
+        ipfs_hash: contentHash,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        status: 'published'
+      };
 
       const { data: post, error: postError } = await supabase
         .from('posts')
@@ -161,6 +230,19 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center">
+        <input
+          id="isNFT"
+          type="checkbox"
+          checked={isNFT}
+          onChange={(e) => setIsNFT(e.target.checked)}
+          className="h-4 w-4 text-primary focus:ring-primary"
+        />
+        <label htmlFor="isNFT" className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+          Mint as NFT
+        </label>
+      </div>
+      
       <div>
         <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Title

@@ -4,16 +4,6 @@
 @import 'tailwindcss/utilities';
 /* stylelint-enable */
 
-/* Animation keyframes */
-@-webkit-keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 /* Base theme variables */
 :root {
   --radius: 0.5rem;
@@ -480,7 +470,7 @@ p:not(:first-child) {
 .animate-draw {
   stroke-dasharray: 1000;
   stroke-dashoffset: 1000;
-  animation: draw 2s ease-in-out forwards;
+  animation: draw 3s ease-in-out forwards;
 }
 
 @keyframes draw {
@@ -744,6 +734,19 @@ p:not(:first-child) {
     color: white;
   }
 
+  .content-wrapper {
+    background-color: white;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    border: 1px solid hsl(var(--border));
+    padding: 1.5rem;
+  }
+  
+  .dark .content-wrapper {
+    background-color: hsl(240, 5.9%, 10%);
+    border-color: hsl(240, 3.7%, 15.9%);
+  }
+}
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
@@ -915,14 +918,10 @@ p:not(:first-child) {
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  max-height: 1.5em;
-  white-space: nowrap;
-  /* Standard property for future compatibility */
   line-clamp: 1;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  max-height: 1.5em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .line-clamp-2 {
@@ -930,13 +929,9 @@ p:not(:first-child) {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  max-height: 3em;
-  /* Standard property for future compatibility */
   line-clamp: 2;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  max-height: 3em;
+  text-overflow: ellipsis;
 }
 
 @layer utilities {

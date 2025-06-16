@@ -53,6 +53,22 @@ export default function Navigation() {
             >
               Home
             </Link>
+            <Link
+              href="/marketplace"
+              className={`text-sm font-medium ${
+                isActive('/marketplace') ? 'text-primary' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+              }`}
+            >
+              Marketplace
+            </Link>
+            <Link
+              href="/collection"
+              className={`text-sm font-medium ${
+                isActive('/collection') ? 'text-primary' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+              }`}
+            >
+              Collection
+            </Link>
 
             {/* Explore Dropdown */}
             <div className="relative" ref={dropdownRef}>

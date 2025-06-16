@@ -87,6 +87,16 @@ export default function Header() {
                 >
                   Home
                 </Link>
+                <Link
+                  href="/marketplace"
+                  className={`text-sm font-medium ${
+                    pathname === '/marketplace'
+                      ? 'text-primary-500'
+                      : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                  }`}
+                >
+                  Marketplace
+                </Link>
                 <div className="relative dropdown-container">
                   <button
                     onClick={() => setIsExploreOpen(!isExploreOpen)}

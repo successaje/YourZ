@@ -190,7 +190,7 @@ const SlideContent = ({
           >
             {description} <span className="inline-block">→</span>
           </motion.p>
-          <div className="flex space-x-4">
+          <div className="flex flex-wrap gap-4">
             <motion.button 
               className="bg-gradient-to-r from-[#6E44FF] to-[#8E54E9] text-white px-6 py-3 rounded-lg font-medium text-sm hover:shadow-[0_0_12px_rgba(110,68,255,0.5)] transition-all"
               whileHover={{ scale: 1.03 }}
@@ -211,6 +211,20 @@ const SlideContent = ({
             >
               {secondaryCta}
             </motion.button>
+            <motion.a
+              href="/marketplace"
+              className="inline-flex items-center bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-lg font-medium text-sm hover:shadow-[0_0_12px_rgba(16,185,129,0.4)] transition-all"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.98 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.5 }}
+            >
+              <span>Explore Our Marketplace</span>
+              <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+            </motion.a>
           </div>
         </div>
       </div>

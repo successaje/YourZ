@@ -2,14 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
 import { useZora } from '@/hooks/useZora'
+import { useZoraMinter } from '@/hooks/useZoraMinter'
 import { uploadToIPFS, uploadFileToIPFS } from '@/lib/ipfs'
 import type { PostMetadata } from '@/types/post'
+import { NFTFormData } from '@/types/nft'
 import { toast } from 'react-hot-toast'
 import { useDropzone } from 'react-dropzone'
+import NFTMintForm from './NFTMintForm'
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false })
 import 'react-quill/dist/quill.snow.css'
@@ -17,61 +20,45 @@ import 'react-quill/dist/quill.snow.css'
 interface PostEditorProps {
   onSave: (content: string, metadata: PostMetadata) => Promise<void>
   onWordCountChange?: (count: number) => void
-  showNFTForm?: boolean
-  setShowNFTForm?: (show: boolean) => void
   isLoading?: boolean
 }
 
 export default function PostEditor({ 
   onSave, 
   onWordCountChange, 
-  showNFTForm = false,
-  setShowNFTForm,
   isLoading = false
 }: PostEditorProps) {
+  const [showNFTForm, setShowNFTForm] = useState(false)
+  const { mintNFT, isMinting } = useZoraMinter()
+  
+  // NFT Form state
+  const [nftFormData, setNftFormData] = useState<NFTFormData>({
+    price: '0.01',
+    royaltyBps: '500', // 5%
+    coverImage: null,
+    coverImagePreview: '',
+    description: '',
+  })
   const router = useRouter()
   const { address } = useAccount()
-  const { mintPost } = useZora()
+  const { createNFT } = useZora()
   const [title, setTitle] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [content, setContent] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [newTag, setNewTag] = useState('')
-  const [mintPrice, setMintPrice] = useState('0.01')
-  const [royaltyBps, setRoyaltyBps] = useState('500') // 5%
   const [coverImage, setCoverImage] = useState<File | null>(null)
   const [coverImagePreview, setCoverImagePreview] = useState<string>('')
+  const [mintPrice, setMintPrice] = useState('0.01')
+  const [royaltyBps, setRoyaltyBps] = useState('500') // 5% default royalty
 
-  const { getRootProps, getInputProps } = useDropzone({
-    accept: {
-      'image/*': ['.png', '.jpg', '.jpeg', '.gif']
-    },
-    maxFiles: 1,
-    maxSize: 5242880, // 5MB
-    onDrop: async (acceptedFiles) => {
-      try {
-        const file = acceptedFiles[0];
-        if (file) {
-          setCoverImage(file);
-          // Create a preview URL
-          const previewUrl = URL.createObjectURL(file);
-          setCoverImagePreview(previewUrl);
-        }
-      } catch (error) {
-        console.error('Error handling file drop:', error);
-        toast.error('Failed to process image');
-      }
-    },
-    onDropRejected: (rejectedFiles) => {
-      const error = rejectedFiles[0].errors[0];
-      if (error.code === 'file-too-large') {
-        toast.error('File is too large. Maximum size is 5MB');
-      } else if (error.code === 'file-invalid-type') {
-        toast.error('Invalid file type. Please upload an image');
-      } else {
-        toast.error('Error uploading file');
-      }
-    }
-  });
+  const handleNftFormChange = (data: NFTFormData) => {
+    setNftFormData(data);
+  };
+  
+  const toggleNFTForm = () => {
+    setShowNFTForm(!showNFTForm);
+  };
 
   // Clean up preview URL when component unmounts
   useEffect(() => {
@@ -102,69 +89,112 @@ export default function PostEditor({
     setTags(tags.filter(tag => tag !== tagToRemove))
   }
 
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: {
+      'image/*': ['.jpeg', '.jpg', '.png', '.gif']
+    },
+    maxFiles: 1,
+    onDrop: (acceptedFiles) => {
+      if (acceptedFiles && acceptedFiles.length > 0) {
+        const file = acceptedFiles[0];
+        setCoverImage(file);
+        setCoverImagePreview(URL.createObjectURL(file));
+      }
+    },
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Starting handleSubmit in PostEditor');
     
     // Validate required fields
     if (!title.trim()) {
-      console.log('Title validation failed');
       toast.error('Please enter a title');
       return;
     }
+    
     if (!content.trim()) {
-      console.log('Content validation failed');
       toast.error('Please enter some content');
       return;
     }
-    if (showNFTForm) {
-      if (!mintPrice || Number(mintPrice) <= 0) {
-        console.log('Mint price validation failed:', mintPrice);
-        toast.error('Please enter a valid mint price');
-        return;
-      }
-      if (!royaltyBps || Number(royaltyBps) < 0 || Number(royaltyBps) > 1000) {
-        console.log('Royalty validation failed:', royaltyBps);
-        toast.error('Royalty must be between 0% and 10%');
-        return;
-      }
-    }
-    console.log('All validations passed');
-
+    
+    setIsSubmitting(true);
+    
     try {
-      let coverImageHash = null;
-      if (showNFTForm && coverImage) {
+      let coverImageUrl = '';
+      
+      // Upload cover image if it exists
+      if (coverImage) {
+        coverImageUrl = await uploadFileToIPFS(coverImage);
+      }
+      
+      // Prepare post metadata
+      const postMetadata: PostMetadata = {
+        title,
+        content,
+        author: { 
+          address: address || '', 
+          name: 'Anonymous' 
+        },
+        createdAt: new Date(),
+        mintPrice: 0, // Default to 0, will be updated if NFT is minted
+        royaltyBps: 0, // Default to 0, will be updated if NFT is minted
+        coverImage: coverImageUrl || '',
+        tags,
+        nftMetadata: {},
+        is_nft: false // Explicitly set to false by default
+      };
+      
+      // If minting as NFT
+      if (showNFTForm) {
         try {
-          console.log('Starting cover image upload to IPFS');
-          coverImageHash = await uploadFileToIPFS(coverImage);
-          console.log('Cover image uploaded successfully, hash:', coverImageHash);
+          const nftResult = await mintNFT({
+            title,
+            description: nftFormData.description || `${title} - Published on YourZ`,
+            content,
+            coverImage: nftFormData.coverImage,
+            price: nftFormData.price,
+            royaltyBps: nftFormData.royaltyBps,
+          });
+          
+          // Add NFT metadata to post metadata
+          postMetadata.nftMetadata = {
+            tokenId: nftResult.tokenId || '',
+            contractAddress: nftResult.tokenAddress || '',
+            txHash: nftResult.txHash || '',
+            price: nftFormData.price,
+            royaltyBps: nftFormData.royaltyBps,
+            metadataHash: nftResult.metadataHash || '',
+            contentHash: nftResult.contentHash || '',
+            imageHash: nftResult.imageHash || '',
+          };
+          
+          // Update post metadata for NFT
+          postMetadata.is_nft = true;
+          postMetadata.mintPrice = parseFloat(nftFormData.price) || 0;
+          postMetadata.royaltyBps = parseInt(nftFormData.royaltyBps) || 0;
+          
+          // Set the cover image from NFT metadata if available
+          if (nftResult.imageHash) {
+            postMetadata.coverImage = `ipfs://${nftResult.imageHash}`;
+          }
+          
         } catch (error) {
-          console.error('Error uploading cover image:', error);
-          toast.error('Failed to upload cover image. Please try again.');
+          console.error('Failed to mint NFT:', error);
+          toast.error('Failed to mint NFT. Please try again.');
           return;
         }
       }
-
-      const metadata = {
-        title,
-        content,
-        author: address,
-        createdAt: new Date().toISOString(),
-        ...(showNFTForm && {
-          mintPrice,
-          royaltyBps,
-          coverImage: coverImageHash,
-        }),
-      };
-      console.log('Prepared metadata for save:', metadata);
-
-      console.log('Calling onSave with content and metadata');
-      await onSave(content, metadata);
-      console.log('onSave completed successfully');
+      
+      // Save the post with metadata
+      await onSave(content, postMetadata);
+      
     } catch (error) {
-      console.error('Error in handleSubmit:', error);
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace available');
-      toast.error('An unexpected error occurred. Please try again.');
+      console.error('Error saving post:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      toast.error(`Failed to publish: ${errorMessage}`);
+      throw error;
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -176,13 +206,63 @@ export default function PostEditor({
     >
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Title */}
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Write your title..."
-          className="w-full text-4xl font-bold bg-transparent border-none focus:ring-0 p-0 placeholder-gray-400 dark:placeholder-gray-600"
-        />
+        <div className="space-y-4">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Write your title..."
+            className="w-full text-4xl font-bold bg-transparent border-none focus:ring-0 p-0 placeholder-gray-400 dark:placeholder-gray-600"
+          />
+          
+          {/* NFT Toggle */}
+          <div className="flex items-center justify-between mt-4">
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={toggleNFTForm}
+                className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  showNFTForm 
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+                }`}
+              >
+                <span className="mr-2">
+                  {showNFTForm ? '✓' : '✕'}
+                </span>
+                Mint as NFT
+              </button>
+              {showNFTForm && (
+                <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">
+                  Your post will be minted as an NFT on the Zora Network
+                </span>
+              )}
+            </div>
+          </div>
+          
+          {/* NFT Form */}
+          <AnimatePresence>
+            {showNFTForm && (
+              <div className="mt-6">
+                <NFTMintForm 
+                  formData={nftFormData}
+                  mintPrice={mintPrice}
+                  onMintPriceChange={(price) => {
+                    setMintPrice(price);
+                    setNftFormData(prev => ({ ...prev, price }));
+                  }}
+                  royaltyBps={royaltyBps}
+                  onRoyaltyChange={(bps) => {
+                    setRoyaltyBps(bps);
+                    setNftFormData(prev => ({ ...prev, royaltyBps: bps }));
+                  }}
+                  onCoverImageChange={(file) => setNftFormData(prev => ({ ...prev, coverImage: file }))}
+                  onDescriptionChange={(description) => setNftFormData(prev => ({ ...prev, description }))}
+                />
+              </div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* Author Info and Word Count */}
         <div className="flex items-center justify-between">
@@ -296,91 +376,7 @@ export default function PostEditor({
           />
         </div>
 
-        {/* NFT Form */}
-        {showNFTForm && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6 p-6 bg-gray-50 dark:bg-gray-800 rounded-lg"
-          >
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-              NFT Settings
-            </h3>
-            
-            {/* Cover Image Upload */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Cover Image
-              </label>
-              <div className="relative w-48 h-32 overflow-hidden rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700">
-                {coverImagePreview ? (
-                  <img
-                    src={coverImagePreview}
-                    alt="Cover preview"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <label className="cursor-pointer text-center p-2">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        {...getRootProps()}
-                        className="hidden"
-                      />
-                      <div className="text-gray-500 dark:text-gray-400">
-                        <svg
-                          className="mx-auto h-8 w-8"
-                          stroke="currentColor"
-                          fill="none"
-                          viewBox="0 0 48 48"
-                        >
-                          <path
-                            d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                            strokeWidth={2}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                        <p className="mt-1 text-xs">Upload cover</p>
-                      </div>
-                    </label>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Mint Price */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Mint Price (ETH)
-                </label>
-                <input
-                  type="number"
-                  value={mintPrice}
-                  onChange={(e) => setMintPrice(e.target.value)}
-                  step="0.001"
-                  min="0"
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Royalty (basis points)
-                </label>
-                <input
-                  type="number"
-                  value={royaltyBps}
-                  onChange={(e) => setRoyaltyBps(e.target.value)}
-                  min="0"
-                  max="10000"
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          </motion.div>
-        )}
+        {/* NFT Form is now handled in the header section */}
 
         {/* Submit Button */}
         <div className="flex justify-end">

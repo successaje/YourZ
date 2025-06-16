@@ -12,7 +12,6 @@ export default function WritePage() {
   const router = useRouter()
   const { address, isConnected } = useAccount()
   const [isLoading, setIsLoading] = useState(false)
-  const [showNFTForm, setShowNFTForm] = useState(false)
 
   useEffect(() => {
     if (!isConnected) {
@@ -26,7 +25,16 @@ export default function WritePage() {
       return
     }
 
-    console.log('Starting handleSave with:', { content, metadata, address, showNFTForm })
+    console.log('Starting handleSave with:', { 
+      content: content ? `${content.substring(0, 50)}...` : 'empty',
+      metadata: {
+        ...metadata,
+        content: metadata.content ? '[...content]' : 'no content',
+        nftMetadata: metadata.nftMetadata ? '[...nftMetadata]' : 'no nftMetadata'
+      },
+      address: address || 'no address',
+      isNft: !!metadata.nftMetadata
+    })
     setIsLoading(true)
 
     try {
@@ -98,34 +106,38 @@ export default function WritePage() {
         throw new Error('No user ID available for post creation')
       }
 
-      // Create the post
-      console.log('Creating post with data:', {
+      // Prepare post data
+      const postData = {
         title: metadata.title,
         content: content,
-        metadata: metadata,
+        metadata: {
+          ...metadata,
+          // Include NFT metadata in the metadata JSONB column
+          ...(metadata.is_nft && metadata.nftMetadata ? {
+            nft: {
+              mint_price: metadata.mintPrice || 0,
+              royalty_bps: metadata.royaltyBps || 0,
+              token_id: metadata.nftMetadata.tokenId || null,
+              contract_address: metadata.nftMetadata.contractAddress || null,
+              // Include any other NFT metadata you want to store
+              ...metadata.nftMetadata
+            }
+          } : {})
+        },
         author_id: userId,
         author_name: profile?.username || `user_${address.slice(0, 6)}`,
         address: address.toLowerCase(),
         status: 'published',
-        is_nft: showNFTForm,
+        is_nft: metadata.is_nft || false, // Use the is_nft flag from metadata
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      })
+      }
+
+      console.log('Creating post with data:', postData)
 
       const { data: post, error: postError } = await supabase
         .from('posts')
-        .insert({
-          title: metadata.title,
-          content: content,
-          metadata: metadata,
-          author_id: userId,
-          author_name: profile?.username || `user_${address.slice(0, 6)}`,
-          address: address.toLowerCase(),
-          status: 'published',
-          is_nft: showNFTForm,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
+        .insert(postData)
         .select()
         .single()
 
@@ -178,8 +190,6 @@ export default function WritePage() {
           <PostEditor 
             onSave={handleSave}
             isLoading={isLoading}
-            showNFTForm={showNFTForm}
-            setShowNFTForm={setShowNFTForm}
           />
         </div>
       </div>
