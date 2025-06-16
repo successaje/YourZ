@@ -14,6 +14,7 @@ export default function Header() {
   const [showRegistration, setShowRegistration] = useState(false)
   const [isRegistered, setIsRegistered] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
+  const [isExploreOpen, setIsExploreOpen] = useState(false)
 
   useEffect(() => {
     setIsMounted(true)
@@ -38,6 +39,23 @@ export default function Header() {
 
     checkUserRegistration()
   }, [address])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const dropdown = document.querySelector('.dropdown-container')
+      if (dropdown && !dropdown.contains(event.target as Node)) {
+        setIsExploreOpen(false)
+      }
+    }
+
+    if (isExploreOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isExploreOpen])
 
   const handleRegistrationSuccess = () => {
     setShowRegistration(false)
@@ -69,16 +87,59 @@ export default function Header() {
                 >
                   Home
                 </Link>
-                <Link
-                  href="/explore"
-                  className={`text-sm font-medium ${
-                    pathname === '/explore'
-                      ? 'text-primary-500'
-                      : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
-                  }`}
-                >
-                  Explore
-                </Link>
+                <div className="relative dropdown-container">
+                  <button
+                    onClick={() => setIsExploreOpen(!isExploreOpen)}
+                    className={`text-sm font-medium ${
+                      isExploreOpen
+                        ? 'text-primary-500'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                    }`}
+                  >
+                    Explore
+                  </button>
+                  {isExploreOpen && (
+                    <div className="absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5">
+                      <div className="py-1" role="menu" aria-orientation="vertical">
+                        <Link
+                          href="/how-it-works"
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          role="menuitem"
+                        >
+                          How It Works
+                        </Link>
+                        <Link
+                          href="/how-to-earn"
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          role="menuitem"
+                        >
+                          How to Earn
+                        </Link>
+                        <Link
+                          href="/faqs"
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          role="menuitem"
+                        >
+                          FAQs
+                        </Link>
+                        <Link
+                          href="/tokenized-posts"
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          role="menuitem"
+                        >
+                          Tokenized Posts
+                        </Link>
+                        <Link
+                          href="/collaborative-writing"
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          role="menuitem"
+                        >
+                          Collaborative Writing
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <Link
                   href="/collections"
                   className={`text-sm font-medium ${
@@ -118,4 +179,4 @@ export default function Header() {
       />
     </>
   )
-} 
+}

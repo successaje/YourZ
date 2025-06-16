@@ -18,7 +18,6 @@
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.50.0",
     "@tailwindcss/forms": "^0.5.7",
-    "@tailwindcss/typography": "^0.5.10",
     "@tanstack/react-query": "^5.80.7",
     "@zoralabs/coins-sdk": "^0.1.0",
     "@zoralabs/protocol-sdk": "^0.13.8",
@@ -41,14 +40,18 @@
     "wagmi": "^2.15.6"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.16",
     "@types/node": "20.11.19",
     "@types/react": "18.2.57",
     "@types/react-dom": "18.2.19",
     "autoprefixer": "10.4.17",
+    "clsx": "^2.1.1",
     "eslint": "8.56.0",
     "eslint-config-next": "14.1.0",
     "postcss": "8.4.35",
+    "tailwind-merge": "^3.3.1",
     "tailwindcss": "3.4.1",
+    "tailwindcss-animate": "^1.0.7",
     "typescript": "5.3.3"
   }
 }

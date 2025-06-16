@@ -404,12 +404,13 @@ export default function ProfilePage() {
                 </button>
               </nav>
               {isOwnProfile && activeTab === 'posts' && (
-                <Link href="/write">
+                <Link href="/write" className="group">
                   <button
-                    className="inline-flex items-center px-4 py-2 text-sm font-bold text-gray-900 dark:text-white bg-primary hover:bg-primary/90 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors shadow-sm [text-shadow:_0_1px_1px_rgba(255,255,255,0.8)] dark:[text-shadow:_0_1px_1px_rgba(0,0,0,0.4)]"
+                    className="inline-flex items-center px-5 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-[#6E44FF] to-[#8E54E9] hover:from-[#5D3BFF] hover:to-[#7A4AFF] rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#6E44FF]/50 transition-all duration-200 ease-in-out transform hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[#6E44FF]/20 active:translate-y-0"
                   >
-                    <FaNewspaper className="w-4 h-4 mr-2" />
+                    <FaNewspaper className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
                     Create Post
+                    <span className="ml-1.5 group-hover:translate-x-1 transition-transform">→</span>
                   </button>
                 </Link>
               )}

@@ -37,14 +37,12 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className="min-h-screen bg-gray-50 dark:bg-dark-100 transition-colors duration-200">
+      <body className="min-h-screen bg-background text-foreground transition-colors duration-200">
         <Providers>
-          <Navigation />
-          <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-dark-100">
+          <div className="flex flex-col min-h-screen">
+            <Navigation />
             <Header />
-            <main className="flex-1 container mx-auto px-4 py-8 mt-16">
-              {children}
-            </main>
+            {children}
           </div>
           <Toaster position="top-right" />
         </Providers>

@@ -1,14 +1,11 @@
 'use client'
 
-import Navigation from '@/components/Navigation'
+import { PageContainer } from '@/components/ui/container'
 
 export default function HowItWorksPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-      <Navigation />
-      
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-8">How It Works</h1>
+    <PageContainer className="py-12 space-y-12">
+      <h1>How It Works</h1>
 
         <div className="space-y-12">
           {/* For Writers Section */}
@@ -91,7 +88,6 @@ export default function HowItWorksPage() {
             </div>
           </section>
         </div>
-      </div>
-    </div>
+    </PageContainer>
   )
 } 

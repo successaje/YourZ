@@ -237,6 +237,47 @@ export default function PostEditor({
 
         {/* Rich Text Editor */}
         <div className="prose dark:prose-invert max-w-none">
+          <style jsx global>{`
+            .ql-toolbar {
+              border: none !important;
+              padding: 0.5rem 0 !important;
+              border-bottom: 1px solid #e5e7eb !important; /* Light gray border */
+              margin-bottom: 1rem !important;
+            }
+            .ql-toolbar .ql-formats {
+              margin-right: 12px !important;
+            }
+            .ql-toolbar button {
+              padding: 4px 8px !important;
+              border-radius: 4px !important;
+              transition: background-color 0.2s !important;
+            }
+            .ql-toolbar button:hover {
+              background-color: #f3f4f6 !important; /* Light gray hover */
+            }
+            .dark .ql-toolbar button:hover {
+              background-color: #374151 !important; /* Darker gray for dark mode */
+            }
+            .ql-toolbar button svg {
+              width: 18px !important;
+              height: 18px !important;
+            }
+            .ql-container {
+              border: none !important;
+              font-size: 1.125rem !important; /* text-lg */
+              line-height: 1.75rem !important; /* leading-relaxed */
+              min-height: 400px !important;
+              padding: 0 !important;
+            }
+            .ql-editor {
+              padding: 0 !important;
+            }
+            .ql-editor.ql-blank::before {
+              color: #9ca3af !important; /* text-gray-400 */
+              font-style: normal !important;
+              left: 0 !important;
+            }
+          `}</style>
           <ReactQuill
             value={content}
             onChange={setContent}
@@ -251,6 +292,7 @@ export default function PostEditor({
                 ['clean'],
               ],
             }}
+            theme="snow"
           />
         </div>
 
