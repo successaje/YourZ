@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useMemo } from 'react';
-import { useZoraMint } from '@/hooks/useZoraMint';
+import { mintZora1155NFT } from '@/utils/zora1155-simple';
 import { deployZora1155Contract } from '@/utils/zora1155-simple';
 import { uploadToIPFS } from '@/utils/ipfs';
-import { useAccount, useWalletClient, usePublicClient, useConfig } from 'wagmi';
+import { useAccount, useWalletClient, usePublicClient, useConfig, useChainId } from 'wagmi';
 import { parseEther, type Address } from 'viem';
 import { toast } from 'react-hot-toast';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
@@ -28,7 +28,14 @@ interface TestNFTSuiteProps {
 
 // Inner component that requires wallet connection
 const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => {
-  const { mintNFT, isMinting: isMintingNFT } = useZoraMint();
+  // All hooks at the top level
+  const chainId = useChainId();
+  const publicClient = usePublicClient();
+  const { address, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
+  const config = useConfig();
+  
+  // Component state
   const [contractAddress, setContractAddress] = useState<string>('');
   const [tokenId, setTokenId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
@@ -45,13 +52,9 @@ const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => 
     quantity: 1,
     price: '0.000777',
     royaltyBps: 100, // 1% in basis points
+    contractAddress: '', // Added contract address field
     attributes: [] as Array<{ trait_type: string; value: string }>,
   });
-  
-  const { address, isConnected } = useAccount();
-  const { data: walletClient } = useWalletClient();
-  const publicClient = usePublicClient();
-  const config = useConfig();
   
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -102,13 +105,13 @@ const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => 
   }
 
   const handleMintNFT = async () => {
-    if (!isConnected || !address || !walletClient) {
+    if (!isConnected || !address) {
       toast.error('Please connect your wallet first');
       return;
     }
     
-    if (!contractAddress) {
-      toast.error('Please deploy a contract first');
+    if (!publicClient) {
+      toast.error('Public client not available');
       return;
     }
 
@@ -140,40 +143,30 @@ const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => 
       
       console.log('Metadata uploaded to IPFS:', metadataHash);
       setStatus('Minting NFT on blockchain...');
-      
-      // Prepare minting parameters
-      const mintParams: MintParams = {
-        name: metadata.name,
-        description: metadata.description,
-        content: metadata.description, // Using description as content for now
-        image: metadata.image,
-        quantity: formData.quantity || 1,
-        price: formData.price || '0.000777', // 0.000777 ETH
-        recipient: address,
-        contractAddress: contractAddress as Address,
-        attributes: metadata.attributes as Array<{ trait_type: string; value: string }>,
-      };
-      
-      console.log('Minting NFT with params:', mintParams);
-      const result = await mintNFT(mintParams);
 
-      if (result.success && result.tokenId) {
-        console.log('NFT minted successfully:', result);
-        setTokenId(result.tokenId);
-        
-        const successMessage = `NFT minted successfully! Token ID: ${result.tokenId}`;
-        setStatus(successMessage);
-        toast.success(successMessage);
-        
-        if (result.transactionHash) {
-          console.log('Mint transaction hash:', result.transactionHash);
-          // You could also add a link to a block explorer here
-        }
-      } else {
-        const errorMessage = result.error || 'Unknown error occurred during minting';
-        console.error('Minting failed:', errorMessage, result);
-        setStatus(`Minting failed: ${errorMessage}`);
-        toast.error(`Minting failed: ${errorMessage}`);
+      // Mint using pure utility
+      const quantity = formData.quantity || 1;
+
+      if (!contractAddress) {
+        throw new Error('Please enter a contract address');
+      }
+
+      const { receipt, explorerLink } = await mintZora1155NFT({
+        tokenId: BigInt(1),
+        quantity,
+        minterAccount: address as `0x${string}`,
+        publicClient,
+        chainId,
+        config,
+        contractAddress: contractAddress as `0x${string}`,
+      });
+
+      setTokenId(BigInt(1).toString());
+      setStatus(`NFT minted! Transaction: ${receipt.transactionHash}`);
+      toast.success('NFT minted successfully!');
+      console.log('NFT minted successfully:', receipt);
+      if (explorerLink) {
+        setStatus((prev) => prev + ` | ` + explorerLink);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to mint NFT';
@@ -190,6 +183,20 @@ const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => 
       case 'deploy':
         return (
           <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Contract Address
+              </label>
+              <input
+                type="text"
+                name="contractAddress"
+                value={formData.contractAddress}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                placeholder="0x..."
+                required
+              />
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Collection Name
@@ -252,90 +259,88 @@ const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => 
         
       case 'mint':
         return (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Contract Address
-              </label>
-              <div className="flex">
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Contract Address
+                </label>
                 <input
                   type="text"
                   value={contractAddress}
                   onChange={(e) => setContractAddress(e.target.value)}
-                  placeholder="0x..."
-                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-l-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                />
-                <span className="ml-2 text-xs">{contractAddress}</span>
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                NFT Content
-              </label>
-              <textarea
-                name="content"
-                value={formData.content}
-                onChange={handleInputChange}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                placeholder="Enter NFT content..."
-              />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Quantity
-                </label>
-                <input
-                  type="number"
-                  name="quantity"
-                  value={formData.quantity}
-                  onChange={handleInputChange}
-                  min="1"
-                  max="100"
+                  placeholder="Enter contract address (0x...)"
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
               </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Price (ETH)
+                  NFT Content
                 </label>
-                <input
-                  type="text"
-                  name="price"
-                  value={formData.price}
+                <textarea
+                  name="content"
+                  value={formData.content}
                   onChange={handleInputChange}
+                  rows={3}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  placeholder="0.000777"
+                  placeholder="Enter NFT content..."
                 />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Quantity
+                  </label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    value={formData.quantity}
+                    onChange={handleInputChange}
+                    min="1"
+                    max="100"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Price (ETH)
+                  </label>
+                  <input
+                    type="text"
+                    name="price"
+                    value={formData.price}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  />
+                </div>
               </div>
             </div>
             
-            <button
-              onClick={handleMintNFT}
-              disabled={isLoading || !contractAddress}
-              className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
-            >
-              {isLoading ? 'Minting...' : 'Mint NFT'}
-            </button>
-            
-            {tokenId && (
-              <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 rounded-md">
-                <p className="font-medium">Successfully Minted!</p>
-                <p className="text-sm mt-1 font-mono break-all">Token ID: {tokenId}</p>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={handleMintNFT}
+                disabled={isLoading}
+                className={`px-4 py-2 rounded-md text-white ${isLoading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} transition-colors`}
+              >
+                {isLoading ? 'Minting...' : 'Mint NFT'}
+              </button>
+              {contractAddress && (
                 <a 
-                  href={`https://sepolia.basescan.org/token/${contractAddress}?a=${tokenId}`}
+                  href={`https://sepolia.basescan.org/address/${contractAddress}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-2 inline-block text-sm text-green-700 dark:text-green-400 hover:underline"
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center"
                 >
-                  View on Base Sepolia Explorer
+                  View Contract on Explorer
+                  <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
                 </a>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         );
         
@@ -491,11 +496,10 @@ const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => 
             </button>
             <button
               onClick={() => setActiveTab('mint')}
-              disabled={!contractAddress}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'mint'
                   ? 'border-purple-500 text-purple-600 dark:border-purple-400 dark:text-purple-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 disabled:opacity-50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
               }`}
             >
               Mint NFT

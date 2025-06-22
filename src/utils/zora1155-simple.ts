@@ -61,5 +61,43 @@ export async function deployZora1155Contract({
 }
 
 
+import { createCollectorClient } from '@zoralabs/protocol-sdk';
+import { writeContract, waitForTransactionReceipt } from '@wagmi/core';
+
 export async function mintZora1155NFT({
+  tokenId,
+  quantity = 1,
+  minterAccount,
+  publicClient,
+  chainId,
+  config,
+  contractAddress,
+}: {
+  tokenId: bigint;
+  quantity?: number;
+  minterAccount: `0x${string}`;
+  publicClient: any;
+  chainId: number;
+  config: any;
+  contractAddress: `0x${string}`;
+}): Promise<{ receipt: any; explorerLink: string }> {
+  if (!publicClient || !minterAccount || !tokenId) {
+    throw new Error('Missing required mint data');
+  }
+  const collectorClient = createCollectorClient({
+    chainId,
+    publicClient,
+  });
+  const { parameters } = await collectorClient.mint({
+    tokenContract: contractAddress as `0x${string}`, //'0x1ec58892306C6C742703885feDe69B546302249b',
+    mintType: '1155',
+    tokenId,
+    quantityToMint: quantity,
+    minterAccount,
+  });
+  const hash = await writeContract(config, parameters);
+  const receipt = await waitForTransactionReceipt(config, { hash });
+  const explorerLink = `https://sepolia.basescan.org/tx/${receipt.transactionHash}`;
+  return { receipt, explorerLink };
+}
   
