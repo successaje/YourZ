@@ -16,10 +16,23 @@ export interface NFTFormData {
 
 interface NFTMintFormProps {
   formData: NFTFormData
-  onChange: (data: NFTFormData) => void
+  mintPrice: string
+  onMintPriceChange: (price: string) => void
+  royaltyBps: string
+  onRoyaltyChange: (bps: string) => void
+  onCoverImageChange: (file: File | null) => void
+  onDescriptionChange: (description: string) => void
 }
 
-export default function NFTMintForm({ formData, onChange }: NFTMintFormProps) {
+export default function NFTMintForm({ 
+  formData, 
+  mintPrice,
+  onMintPriceChange,
+  royaltyBps,
+  onRoyaltyChange,
+  onCoverImageChange,
+  onDescriptionChange
+}: NFTMintFormProps) {
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
     if (!file) return
@@ -36,16 +49,8 @@ export default function NFTMintForm({ formData, onChange }: NFTMintFormProps) {
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      onChange({
-        ...formData,
-        coverImage: file,
-        coverImagePreview: reader.result as string
-      })
-    }
-    reader.readAsDataURL(file)
-  }, [formData, onChange])
+    onCoverImageChange(file)
+  }, [onCoverImageChange])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -81,7 +86,7 @@ export default function NFTMintForm({ formData, onChange }: NFTMintFormProps) {
                 />
                 <button
                   type="button"
-                  onClick={() => onChange({ ...formData, coverImage: null, coverImagePreview: '' })}
+                  onClick={() => onCoverImageChange(null)}
                   className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -137,8 +142,8 @@ export default function NFTMintForm({ formData, onChange }: NFTMintFormProps) {
                   id="price"
                   min="0.0001"
                   step="0.0001"
-                  value={formData.price}
-                  onChange={(e) => onChange({ ...formData, price: e.target.value })}
+                  value={mintPrice}
+                  onChange={(e) => onMintPriceChange(e.target.value)}
                   className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white pl-3 pr-12 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-500 dark:focus:border-blue-500 sm:text-sm"
                   placeholder="0.01"
                 />
@@ -166,7 +171,7 @@ export default function NFTMintForm({ formData, onChange }: NFTMintFormProps) {
                   onChange={(e) => {
                     const value = e.target.value
                     const bps = Math.round(Number(value) * 100)
-                    onChange({ ...formData, royaltyBps: bps.toString() })
+                    onRoyaltyChange(bps.toString())
                   }}
                   className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white pl-3 pr-12 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-500 dark:focus:border-blue-500 sm:text-sm"
                   placeholder="5"
@@ -192,7 +197,7 @@ export default function NFTMintForm({ formData, onChange }: NFTMintFormProps) {
                 name="description"
                 id="description"
                 value={formData.description}
-                onChange={(e) => onChange({ ...formData, description: e.target.value })}
+                onChange={(e) => onDescriptionChange(e.target.value)}
                 className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2"
                 placeholder="Tell the story behind this post..."
               />

@@ -28,9 +28,17 @@ export function useZora() {
       throw new Error('Wallet not connected')
     }
 
+    // Patch: always use baseSepoliaConfig as chain, and ensure publicClient has correct chain property
+    // Import baseSepoliaConfig from your chain config file
+    import { baseSepoliaConfig } from '@/utils/zora';
+    // If publicClient.chain is undefined, patch it
+    const fixedPublicClient = {
+      ...publicClient,
+      chain: publicClient.chain ?? baseSepoliaConfig,
+    };
     const creatorClient = createCreatorClient({
-      chain: zora,
-      publicClient,
+      chain: baseSepoliaConfig,
+      publicClient: fixedPublicClient,
     })
 
     const { request } = await creatorClient.createNew1155Contract({

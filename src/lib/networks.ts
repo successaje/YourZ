@@ -1,4 +1,5 @@
-import { Chain } from 'wagmi'
+import type { Chain } from 'viem'
+import { baseSepolia as viemBaseSepolia } from 'viem/chains'
 
 export const zora: Chain = {
   id: 7777777,
@@ -22,25 +23,25 @@ export const zora: Chain = {
   iconUrl: 'https://zora.co/favicon.ico',
 }
 
-export const zoraSepolia: Chain = {
-  id: 999999999,
-  name: 'Zora Sepolia',
-  network: 'zora-sepolia',
+export const baseSepoliaConfig: Chain = {
+  id: 84532,
+  name: 'Base Sepolia',
+  network: 'base-sepolia',
   nativeCurrency: {
     decimals: 18,
     name: 'Ethereum',
     symbol: 'ETH',
   },
   rpcUrls: {
-    public: { http: ['https://sepolia.rpc.zora.energy'] },
-    default: { http: ['https://sepolia.rpc.zora.energy'] },
+    public: { http: ['https://sepolia.base.org'] },
+    default: { http: ['https://sepolia.base.org'] },
   },
   blockExplorers: {
     default: { 
-      name: 'Zora Sepolia Explorer', 
-      url: 'https://sepolia.explorer.zora.energy' 
+      name: 'Basescan', 
+      url: 'https://sepolia.basescan.org' 
     },
   },
   testnet: true,
-  iconUrl: 'https://zora.co/favicon.ico',
+  iconUrl: 'https://base.org/favicon.ico',
 }

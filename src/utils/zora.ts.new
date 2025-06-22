@@ -1,0 +1,46 @@
+    // 1. Define the chain configuration explicitly
+    const chainConfig = {
+      id: baseSepoliaConfig.id,
+      name: baseSepoliaConfig.name,
+      network: 'base-sepolia',
+      nativeCurrency: baseSepoliaConfig.nativeCurrency,
+      rpcUrls: {
+        default: { http: [baseSepoliaConfig.rpcUrls.default.http[0]] },
+        public: { http: [baseSepoliaConfig.rpcUrls.default.http[0]] },
+      },
+      blockExplorers: baseSepoliaConfig.blockExplorers
+    };
+
+    // 2. Set up the wallet client
+    const walletClient = createWalletClient({
+      chain: chainConfig,
+      transport: custom(window.ethereum)
+    });
+
+    // 3. Get the account
+    const [account] = await walletClient.getAddresses();
+    if (!account) {
+      throw new Error('No accounts found');
+    }
+
+    // 4. Add Base Sepolia to the wallet if not already added
+    try {
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: `0x${baseSepoliaConfig.id.toString(16)}`,
+          chainName: baseSepoliaConfig.name,
+          nativeCurrency: baseSepoliaConfig.nativeCurrency,
+          rpcUrls: [baseSepoliaConfig.rpcUrls.default.http[0]],
+          blockExplorerUrls: baseSepoliaConfig.blockExplorers ? [baseSepoliaConfig.blockExplorers.default.url] : []
+        }]
+      });
+    } catch (error) {
+      console.warn('Failed to add chain to wallet, continuing anyway:', error);
+    }
+
+    // 5. Create public client with the same configuration
+    const publicClient = createPublicClient({
+      chain: chainConfig,
+      transport: http(baseSepoliaConfig.rpcUrls.default.http[0])
+    });

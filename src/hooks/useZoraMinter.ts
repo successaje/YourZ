@@ -61,7 +61,8 @@ export const useZoraMinter = () => {
       };
       
       // 4. Upload metadata to IPFS
-      const metadataHash = await uploadToIPFS(JSON.stringify(metadata));
+      console.log('Uploading metadata:', metadata);
+      const metadataHash = await uploadToIPFS(metadata);
       
       // In a real implementation, you would:
       // 1. Sign and send the transaction using the user's wallet
