@@ -31,9 +31,15 @@ interface PostCardProps {
 }
 
 export default function PostCard({ post }: PostCardProps) {
-  const [isLiked, setIsLiked] = useState(post.is_liked || false)
-  const [isBookmarked, setIsBookmarked] = useState(post.is_bookmarked || false)
-  const [likeCount, setLikeCount] = useState(post.likes_count || 0)
+  // Safely handle potentially undefined post or its properties
+  const [isLiked, setIsLiked] = useState(post?.is_liked ?? false)
+  const [isBookmarked, setIsBookmarked] = useState(post?.is_bookmarked ?? false)
+  const [likeCount, setLikeCount] = useState(post?.likes_count ?? 0)
+  
+  // If post is not defined, return null or a loading state
+  if (!post) {
+    return <div className="p-4 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse h-48" />
+  }
 
   const handleLike = async (e: React.MouseEvent) => {
     e.preventDefault()

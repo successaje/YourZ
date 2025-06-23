@@ -2,10 +2,10 @@
 
 import { useState, useMemo } from 'react';
 import { mintZora1155NFT } from '@/utils/zora1155-simple';
-import { deployZora1155Contract } from '@/utils/zora1155-simple';
+import { deployZora1155Contract, deployAnotherZora1155Contract } from '@/utils/zora1155-simple';
 import { uploadToIPFS } from '@/utils/ipfs';
 import { useAccount, useWalletClient, usePublicClient, useConfig, useChainId } from 'wagmi';
-import { parseEther, type Address } from 'viem';
+import { parseEther, type Address, createWalletClient, createPublicClient } from 'viem';
 import { toast } from 'react-hot-toast';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { writeContract, waitForTransactionReceipt } from "@wagmi/core";
@@ -32,7 +32,8 @@ const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => 
   const chainId = useChainId();
   const publicClient = usePublicClient();
   const { address, isConnected } = useAccount();
-  const { data: walletClient } = useWalletClient();
+  // const { data: walletClient } = useWalletClient();
+  const walletClient = useWalletClient();
   const config = useConfig();
   
   // Component state
@@ -73,7 +74,7 @@ const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => 
     setIsLoading(true);
     setStatus('Deploying contract...');
     try {
-      const { contractAddress, parameters } = await deployZora1155Contract({
+      const { contractAddress, parameters } = await deployAnotherZora1155Contract({
         name: formData.name,
         description: formData.description,
         image: formData.image,
@@ -82,6 +83,14 @@ const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => 
         uploadFileToIpfs: uploadToIPFS,
         uploadJsonToIpfs: uploadToIPFS,
       });
+
+      // console.log("Loading params to simulate.....")
+
+      // const { request } = await publicClient.simulateContract(parameters)
+      
+      // console.log("Param here: ", request)
+
+      // const hash = await walletClient.writeContract(request)
 
       const hash = await writeContract(config, parameters)
 

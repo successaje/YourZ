@@ -1,56 +1,167 @@
 'use client'
 
-import { useCallback } from 'react'
-import { useAccount, usePublicClient } from 'wagmi'
-import { createCreatorClient, getCollection, getToken } from '@zoralabs/protocol-sdk'
-import { zora } from 'viem/chains'
-import { parseEther } from 'viem'
-import { NFT } from '@/types/nft'
+import { useState, useCallback } from 'react'
+import { useAccount, usePublicClient, useWalletClient, useChainId,  } from 'wagmi'
+import { baseSepolia } from 'viem/chains'
+import { uploadToIPFS } from '../utils/ipfs'
+import { deployZora1155Contract } from '../utils/zora1155-simple'
 
 export function useZora() {
   const { address } = useAccount()
   const publicClient = usePublicClient()
+  const { data: walletClient } = useWalletClient()
 
   const createNFT = async ({
     name,
-    symbol,
-    royaltyBps,
-    tokenURI,
-    mintPrice,
+    description = 'YourZ NFT Collection',
+    image,
+    symbol = 'YOURZ',
+    royaltyBps = 100, // 1% default
+    royaltyRecipient,
   }: {
     name: string
-    symbol: string
-    royaltyBps: number
-    tokenURI: string
-    mintPrice: string
+    description?: string
+    image: File | string
+    symbol?: string
+    royaltyBps?: number
+    royaltyRecipient?: `0x${string}`
   }) => {
-    if (!address || !publicClient) {
+    if (!publicClient || !walletClient || !address) {
       throw new Error('Wallet not connected')
     }
 
-    // Patch: always use baseSepoliaConfig as chain, and ensure publicClient has correct chain property
-    // Import baseSepoliaConfig from your chain config file
-    import { baseSepoliaConfig } from '@/utils/zora';
-    // If publicClient.chain is undefined, patch it
-    const fixedPublicClient = {
-      ...publicClient,
-      chain: publicClient.chain ?? baseSepoliaConfig,
-    };
-    const creatorClient = createCreatorClient({
-      chain: baseSepoliaConfig,
-      publicClient: fixedPublicClient,
-    })
+    try {
+      // 1. Upload image to IPFS
+      const uploadFileToIpfs = async (file: File | string) => {
+        if (typeof file === 'string') return file; // Already a URL
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetch('/api/ipfs/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+        return data.url;
+      };
 
-    const { request } = await creatorClient.createNew1155Contract({
-      name,
-      symbol,
-      royaltyBps,
-      royaltyRecipient: address,
-      tokenURI,
-      mintPrice,
-    })
+      // 2. Upload JSON to IPFS
+      const uploadJsonToIpfs = async (json: any) => {
+        const response = await fetch('/api/ipfs/json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(json),
+        });
+        const data = await response.json();
+        return data.url;
+      };
 
-    return request
+      // 3. Deploy the contract using the simplified approach
+      const { contractAddress, parameters } = await deployZora1155Contract({
+        name,
+        description,
+        image,
+        publicClient,
+        account: address,
+        uploadFileToIpfs,
+        uploadJsonToIpfs,
+      });
+
+      // 4. Send the transaction
+      const hash = await walletClient.sendTransaction({
+        to: parameters.to as `0x${string}`,
+        data: parameters.data as `0x${string}`,
+        value: BigInt(parameters.value?.toString() || '0'),
+        account: address as `0x${string}`,
+        chain: baseSepolia,
+      });
+
+      console.log('Transaction sent with hash:', hash);
+
+      // 5. Wait for the transaction to be mined
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash,
+      });
+
+      if (!receipt.contractAddress) {
+        throw new Error('No contract address in receipt');
+      }
+
+      console.log('Contract deployed at:', receipt.contractAddress);
+
+      return {
+        contractAddress: receipt.contractAddress,
+        txHash: receipt.transactionHash,
+      };;
+    } catch (error) {
+      console.error('Error in createNFT:', {
+        error,
+        message: error?.message,
+        name: error?.name,
+        stack: error?.stack,
+      });
+      
+      const errorMessage = error?.message || 'Failed to create NFT contract';
+      const enhancedError = new Error(errorMessage);
+      enhancedError.name = 'NFTContractCreationError';
+      if (error?.stack) {
+        enhancedError.stack = error.stack;
+      }
+      throw enhancedError;
+    }
+  }
+
+  const mintNFT = async ({
+    contractAddress,
+    tokenId,
+    quantity = 1,
+    tokenURI,
+  }: {
+    contractAddress: string
+    tokenId: string
+    quantity?: number
+    tokenURI: string
+  }) => {
+    if (!address || !publicClient || !walletClient) {
+      throw new Error('Wallet not connected')
+    }
+
+    try {
+      // In a real implementation, this would use the Zora SDK to mint an NFT
+      console.log(`Minting ${quantity} of token ${tokenId} from ${contractAddress}`)
+      
+      // Mock implementation - in a real app, this would be a blockchain transaction
+      await new Promise(resolve => setTimeout(resolve, 2000)) // Simulate network delay
+      
+      return {
+        success: true,
+        transactionHash: '0x' + Math.random().toString(16).substr(2, 64)
+      }
+    } catch (error) {
+      console.error('Error minting NFT:', error)
+      throw error
+    }
+  }
+
+  const collectPost = async (postId: string, price: string) => {
+    if (!address) {
+      throw new Error('Wallet not connected')
+    }
+
+    try {
+      // In a real implementation, this would use the Zora SDK to collect an NFT
+      console.log(`Collecting post ${postId} for ${price} ETH`)
+      
+      // Mock implementation - in a real app, this would be a blockchain transaction
+      await new Promise(resolve => setTimeout(resolve, 2000)) // Simulate network delay
+      
+      return {
+        success: true,
+        transactionHash: '0x' + Math.random().toString(16).substr(2, 64)
+      }
+    } catch (error) {
+      console.error('Error collecting post:', error)
+      throw error
+    }
   }
 
   const fetchAllNFTs = useCallback(async (): Promise<NFT[]> => {
@@ -136,28 +247,6 @@ export function useZora() {
     }
   }, [publicClient])
 
-  const collectPost = async (postId: string, price: string) => {
-    if (!address || !publicClient) {
-      throw new Error('Wallet not connected')
-    }
-
-    try {
-      // In a real implementation, this would use the Zora SDK to collect an NFT
-      console.log(`Collecting post ${postId} for ${price} ETH`)
-      
-      // Mock implementation - in a real app, this would be a blockchain transaction
-      await new Promise(resolve => setTimeout(resolve, 2000)) // Simulate network delay
-      
-      return {
-        success: true,
-        transactionHash: '0x' + Math.random().toString(16).substr(2, 64)
-      }
-    } catch (error) {
-      console.error('Error collecting post:', error)
-      throw error
-    }
-  }
-
   const resellPost = async (postId: string, price: string) => {
     if (!address || !publicClient) {
       throw new Error('Wallet not connected')
@@ -182,9 +271,10 @@ export function useZora() {
 
   return {
     createNFT,
+    mintNFT,
+    collectPost,
     fetchAllNFTs,
     fetchNFTDetails,
-    collectPost,
     resellPost,
   }
-} 
+}
