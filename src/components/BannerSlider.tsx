@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence, Variants, useAnimation } from 'framer-motion';
 
 const slides = [
@@ -8,19 +9,25 @@ const slides = [
     title: "Write. Mint. Earn.",
     description: "Turn your posts into ownable NFTs",
     cta: "Start Writing",
-    secondaryCta: "Explore Posts"
+    ctaLink: "/write",
+    secondaryCta: "FAQs",
+    secondaryCtaLink: "/faqs"
   },
   {
     title: "Own Your Influence",
     description: "Monetize your content with 10% royalties",
     cta: "Learn More",
-    secondaryCta: "See Examples"
+    ctaLink: "/how-it-works",
+    secondaryCta: "Explore Marketplace",
+    secondaryCtaLink: "/marketplace"
   },
   {
     title: "Build on Zora",
     description: "Join the future of creator economy",
-    cta: "Get Started",
-    secondaryCta: "Read Docs"
+    cta: "View Collections",
+    ctaLink: "/collections",
+    secondaryCta: "Read Docs",
+    secondaryCtaLink: "https://docs.zora.co/"
   }
 ];
 
@@ -139,12 +146,16 @@ const SlideContent = ({
   title, 
   description, 
   cta,
-  secondaryCta 
+  ctaLink,
+  secondaryCta,
+  secondaryCtaLink
 }: { 
   title: string; 
   description: string; 
   cta: string;
+  ctaLink: string;
   secondaryCta: string;
+  secondaryCtaLink: string;
 }) => {
   const controls = useAnimation();
   const textControls = useAnimation();
@@ -191,40 +202,56 @@ const SlideContent = ({
             {description} <span className="inline-block">→</span>
           </motion.p>
           <div className="flex flex-wrap gap-4">
-            <motion.button 
-              className="bg-gradient-to-r from-[#6E44FF] to-[#8E54E9] text-white px-6 py-3 rounded-lg font-medium text-sm hover:shadow-[0_0_12px_rgba(110,68,255,0.5)] transition-all"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.98 }}
+            <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.3 }}
             >
-              {cta}
-            </motion.button>
-            <motion.button 
-              className="bg-transparent border border-white/20 text-white px-6 py-3 rounded-lg font-medium text-sm hover:bg-white/5 transition-all"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.98 }}
+              <Link 
+                href={ctaLink || '#'}
+                className="inline-block bg-gradient-to-r from-[#6E44FF] to-[#8E54E9] text-white px-6 py-3 rounded-lg font-medium text-sm hover:shadow-[0_0_12px_rgba(110,68,255,0.5)] transition-all"
+              >
+                {cta || 'Get Started'}
+              </Link>
+            </motion.div>
+            <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.4 }}
             >
-              {secondaryCta}
-            </motion.button>
-            <motion.a
-              href="/marketplace"
-              className="inline-flex items-center bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-lg font-medium text-sm hover:shadow-[0_0_12px_rgba(16,185,129,0.4)] transition-all"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.98 }}
+              {secondaryCtaLink && typeof secondaryCtaLink === 'string' && (secondaryCtaLink.startsWith('http') || secondaryCtaLink.startsWith('mailto:')) ? (
+                <a 
+                  href={secondaryCtaLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block bg-transparent border border-white/20 text-white px-6 py-3 rounded-lg font-medium text-sm hover:bg-white/5 transition-all"
+                >
+                  {secondaryCta}
+                </a>
+              ) : (
+                <Link 
+                  href={secondaryCtaLink || '#'}
+                  className="inline-block bg-transparent border border-white/20 text-white px-6 py-3 rounded-lg font-medium text-sm hover:bg-white/5 transition-all"
+                >
+                  {secondaryCta || 'Learn More'}
+                </Link>
+              )}
+            </motion.div>
+            <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.5 }}
             >
-              <span>Explore Our Marketplace</span>
-              <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-            </motion.a>
+              <Link 
+                href="/marketplace"
+                className="inline-flex items-center bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-lg font-medium text-sm hover:shadow-[0_0_12px_rgba(16,185,129,0.4)] transition-all"
+              >
+                <span>Explore Our Marketplace</span>
+                <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+              </Link>
+            </motion.div>
           </div>
         </div>
       </div>
@@ -302,7 +329,9 @@ export function BannerSlider() {
               title={slides[currentSlide].title}
               description={slides[currentSlide].description}
               cta={slides[currentSlide].cta}
+              ctaLink={slides[currentSlide].ctaLink}
               secondaryCta={slides[currentSlide].secondaryCta}
+              secondaryCtaLink={slides[currentSlide].secondaryCtaLink}
             />
           </div>
           

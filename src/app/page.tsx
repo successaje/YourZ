@@ -2,6 +2,7 @@
 
 import { Suspense } from 'react'
 import { useAccount } from 'wagmi'
+import Link from 'next/link'
 import { BannerSlider } from '@/components/BannerSlider'
 import { RecommendedArtists } from '@/components/RecommendedArtists'
 import { UserEarnings } from '@/components/UserEarnings'
@@ -13,9 +14,21 @@ export default function Home() {
   return (
     <div className="min-h-screen">
       {/* Banner Slider */}
-      <div className="bg-gradient-to-r from-blue-500 to-purple-600 py-8">
+      <div className="bg-gradient-to-r from-blue-500 to-purple-600 py-8 relative">
         <div className="container mx-auto px-4">
-          <BannerSlider />
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <BannerSlider />
+            </div>
+            <div className="hidden md:block ml-8">
+              <Link 
+                href="/write" 
+                className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-full shadow-sm text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 transition-colors duration-200"
+              >
+                Start creating
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
 

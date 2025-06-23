@@ -46,6 +46,12 @@ interface Post {
 const CompactPostCard = ({ post }: { post: Post }) => {
   const tags = getPostTags(post)
   const isNew = tags.includes('new')
+  const postDate = new Date(post.created_at)
+  const formattedDate = postDate.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
 
   return (
     <Link href={`/posts/${post.id}`} className="block group">
@@ -69,7 +75,10 @@ const CompactPostCard = ({ post }: { post: Post }) => {
           </div>
         )}
         <div className="ml-4 flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-2">
+          <h3 className="text-sm font-medium text-gray-900 dark:text-white line-clamp-1 mb-1">
+            {post.title || 'Untitled Post'}
+          </h3>
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             {tags.map((tag) => (
               <PostTag key={tag} type={tag} />
             ))}
@@ -79,29 +88,26 @@ const CompactPostCard = ({ post }: { post: Post }) => {
               </span>
             )}
           </div>
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">
-            {post.title}
-          </h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
-            {stripHtml(post.content)}
+          <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+            {stripHtml(post.content) || 'No content available'}
           </p>
-          <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
-            <span>{post.author_name || `user_${post.wallet_address?.slice(0, 6)}`}</span>
-            <div className="flex items-center space-x-2">
-              {post.likes_count > 0 && (
-                <span className="flex items-center">
-                  <span className="text-red-500 mr-1">♥</span>
-                  {post.likes_count}
-                </span>
-              )}
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+              <span className="flex items-center gap-1">
+                <Flame className="h-3 w-3" />
+                {post.likes_count.toLocaleString()}
+              </span>
               {post.comments_count > 0 && (
-                <span className="flex items-center">
-                  <span className="text-gray-500 mr-1">💬</span>
-                  {post.comments_count}
+                <span className="flex items-center gap-1">
+                  <Users className="h-3 w-3" />
+                  {post.comments_count.toLocaleString()}
                 </span>
               )}
-              <span>{new Date(post.created_at).toLocaleDateString()}</span>
+              <span className="hidden sm:inline">{formattedDate}</span>
             </div>
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              by {post.author_name || 'Anonymous'}
+            </span>
           </div>
         </div>
         <ArrowRight className="h-4 w-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
@@ -132,39 +138,57 @@ export default function PostsList() {
     try {
       setIsLoading(true)
       
-      // Mock data for demonstration
-      const mockPosts = Array.from({ length: 20 }, (_, i) => ({
-        id: `post-${i}`,
-        title: `Post Title ${i + 1}`,
-        content: `This is a sample post content ${i + 1}.`,
-        created_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-        updated_at: new Date().toISOString(),
-        likes_count: Math.floor(Math.random() * 1000),
-        views_count: Math.floor(Math.random() * 5000),
-        comments_count: Math.floor(Math.random() * 100),
-        is_liked: false,
-        is_bookmarked: false,
-        author_name: `User${Math.floor(Math.random() * 1000)}`,
-        wallet_address: `0x${Math.random().toString(16).substring(2, 42)}`,
-        is_featured: i < 3,
-        is_nft: Math.random() > 0.5,
-        image_url: `https://picsum.photos/seed/${Math.random()}/800/600`
+      // Fetch posts from Supabase
+      const { data: posts, error } = await supabase
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (error) throw error
+
+      if (!posts || posts.length === 0) {
+        setPosts({
+          featured: [],
+          recent: [],
+          trending: [],
+          popular: [],
+          recommended: []
+        })
+        return
+      }
+
+      // Process posts to match our interface
+      const processedPosts = posts.map(post => ({
+        id: post.id,
+        title: post.title || 'Untitled Post',
+        content: post.content || '',
+        created_at: post.created_at || new Date().toISOString(),
+        updated_at: post.updated_at || new Date().toISOString(),
+        likes_count: post.likes_count || 0,
+        views_count: post.views_count || 0,
+        comments_count: post.comments_count || 0,
+        is_liked: post.is_liked || false,
+        is_bookmarked: post.is_bookmarked || false,
+        author_name: post.author_name || 'Anonymous',
+        wallet_address: post.wallet_address || '0x',
+        is_featured: post.is_featured || false,
+        is_nft: post.is_nft || false,
+        image_url: post.image_url || `https://picsum.photos/seed/${Math.random()}/800/600`,
+        metadata: post.metadata || {}
       }))
 
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500))
-
       // Categorize posts
-      const featured = [...mockPosts].filter(p => p.is_featured)
-      const recent = [...mockPosts].sort((a, b) => 
+      const featured = processedPosts.filter(p => p.is_featured)
+      const recent = [...processedPosts].sort((a, b) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       )
-      const popular = [...mockPosts].sort((a, b) => b.views_count - a.views_count)
-      const trending = [...mockPosts].sort((a, b) => b.likes_count - a.likes_count)
-      const recommended = [...mockPosts].sort(() => 0.5 - Math.random())
+      const popular = [...processedPosts].sort((a, b) => b.views_count - a.views_count)
+      const trending = [...processedPosts].sort((a, b) => b.likes_count - a.likes_count)
+      const recommended = [...processedPosts].sort(() => 0.5 - Math.random())
 
       setPosts({
-        featured,
+        featured: featured.slice(0, 5),
         recent: recent.slice(0, 5),
         trending: trending.slice(0, 5),
         popular: popular.slice(0, 5),
@@ -174,6 +198,15 @@ export default function PostsList() {
     } catch (error) {
       console.error('Error fetching posts:', error)
       setError('Failed to load posts. Please try again later.')
+      
+      // Fallback to empty state on error
+      setPosts({
+        featured: [],
+        recent: [],
+        trending: [],
+        popular: [],
+        recommended: []
+      })
     } finally {
       setIsLoading(false)
     }

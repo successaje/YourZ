@@ -102,6 +102,22 @@ export default function Navigation() {
                       How to Earn
                     </Link>
                     <Link
+                      href="/test/ipfs"
+                      className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      role="menuitem"
+                      onClick={() => setIsExploreOpen(false)}
+                    >
+                      Test IPFS Upload
+                    </Link>
+                    <Link
+                      href="/test/nft"
+                      className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      role="menuitem"
+                      onClick={() => setIsExploreOpen(false)}
+                    >
+                      Test NFT Contract & Minting
+                    </Link>
+                    <Link
                       href="/faqs"
                       className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                       role="menuitem"
