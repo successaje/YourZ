@@ -1,26 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createServerSupabaseClient } from '@/lib/supabase'
 
-if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-  throw new Error('Missing env.NEXT_PUBLIC_SUPABASE_URL')
-}
-if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('Missing env.SUPABASE_SERVICE_ROLE_KEY')
-}
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    },
-    db: {
-      schema: 'public'
-    }
-  }
-)
+// Initialize Supabase client with service role
+const supabase = createServerSupabaseClient()
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -31,6 +13,22 @@ export async function GET(request: Request) {
   }
 
   try {
+    console.log('Checking registration for address:', address)
+    
+    // Test the Supabase connection first
+    const { data: testData, error: testError } = await supabase
+      .from('users')
+      .select('*')
+      .limit(1)
+    
+    if (testError) {
+      console.error('Supabase connection test failed:', testError)
+      throw new Error(`Supabase connection failed: ${testError.message}`)
+    }
+    
+    console.log('Supabase connection test successful')
+    
+    // If test passed, proceed with the actual query
     const { data, error } = await supabase
       .from('users')
       .select('address')
@@ -39,14 +37,33 @@ export async function GET(request: Request) {
 
     // PGRST116 means no rows found, which is expected for new users
     if (error && error.code !== 'PGRST116') {
-      console.error('Unexpected error checking user registration:', error)
+      console.error('Unexpected error checking user registration:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      })
       throw error
     }
 
-    // If no error or PGRST116 error, user is not registered
-    return NextResponse.json({ isRegistered: !!data })
-  } catch (error) {
-    console.error('Error checking user registration:', error)
-    return NextResponse.json({ error: 'Failed to check user registration' }, { status: 500 })
+    console.log('User registration check completed successfully')
+    return NextResponse.json({ 
+      isRegistered: !!data,
+      debug: { foundUser: !!data }
+    })
+  } catch (error: any) {
+    console.error('Error checking user registration:', {
+      message: error.message,
+      details: error.details || error.toString(),
+      stack: error.stack,
+      name: error.name
+    })
+    return NextResponse.json({ 
+      error: 'Failed to check user registration',
+      debug: { 
+        message: error.message,
+        code: error.code
+      } 
+    }, { status: 500 })
   }
 } 

@@ -4,15 +4,16 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { createClient } from '@supabase/supabase-js'
 import { toast } from 'react-hot-toast'
 import { formatDistanceToNow } from 'date-fns'
 import { motion } from 'framer-motion'
-import { FiArrowLeft, FiUser } from 'react-icons/fi'
+import { FiArrowLeft, FiUser, FiPlus, FiX, FiExternalLink } from 'react-icons/fi'
 import Link from 'next/link'
 import { useZora } from '@/hooks/useZora'
-import { useIPFS } from '@/utils/ipfs'
+import { getFromIPFS } from '@/lib/ipfs'
 import type { Post } from '@/types'
+import { Dialog } from '@headlessui/react'
+import { supabase } from '@/lib/supabase'
 
 // Type for author information
 interface Author {
@@ -92,12 +93,39 @@ export default function PostPage() {
   const params = useParams<PostPageParams>()
   const { address } = useAccount()
   const { collectPost, resellPost } = useZora()
-  const { getFromIPFS } = useIPFS()
   
   const [post, setPost] = useState<DatabasePost | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isCollecting, setIsCollecting] = useState(false)
   const [isReselling, setIsReselling] = useState(false)
+  // Modal state
+  const [showCoinModal, setShowCoinModal] = useState(false)
+  // Coin config state
+  const [coinName, setCoinName] = useState('')
+  const [coinSymbol, setCoinSymbol] = useState('')
+  const [coinSupply, setCoinSupply] = useState(1000)
+  const [coinRoyalty, setCoinRoyalty] = useState(5)
+  const [coinDesc, setCoinDesc] = useState('')
+  // Coin data state
+  const [coinData, setCoinData] = useState<any>(null)
+
+  // Eligibility: must be author, logged in, and no coin yet
+  const isAuthor = address && post && address.toLowerCase() === post.author?.address?.toLowerCase()
+  // For now, assume post.hasCoin or post.coinAddress means coin exists
+  const hasCoin = post && (post.hasCoin || post.coinAddress)
+  const canCreateCoin = isAuthor && !hasCoin
+
+  // Set default coin name/symbol when modal opens
+  useEffect(() => {
+    if (showCoinModal && post) {
+      setCoinName(`${post.title} Coin`)
+      setCoinSymbol(
+        post.title
+          ? post.title.replace(/[^A-Za-z0-9]/g, '').slice(0, 4).toUpperCase() + Math.floor(Math.random() * 90 + 10)
+          : 'POST'
+      )
+    }
+  }, [showCoinModal, post])
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -110,11 +138,7 @@ export default function PostPage() {
       try {
         setIsLoading(true)
         
-        // Initialize Supabase client
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        )
+
         
         // Fetch the post from the database
         const { data: dbPost, error } = await supabase
@@ -127,6 +151,19 @@ export default function PostPage() {
         
         if (!dbPost) {
           throw new Error('Post not found')
+        }
+
+        // Fetch coin data if post has a coin
+        if (dbPost.has_coin) {
+          const { data: coin, error: coinError } = await supabase
+            .from('post_coins')
+            .select('*')
+            .eq('post_id', params.id)
+            .single()
+          
+          if (!coinError && coin) {
+            setCoinData(coin)
+          }
         }
         
         // Process the post data with proper typing
@@ -278,7 +315,90 @@ export default function PostPage() {
             Back to posts
           </Link>
         </div>
-        
+        {/* Create Coin Button (Eligibility) */}
+        {canCreateCoin && (
+          <div className="mb-6 flex justify-end">
+            <button
+              onClick={() => setShowCoinModal(true)}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              <FiPlus className="mr-2" />
+              Create Coin for this Post
+            </button>
+          </div>
+        )}
+        {/* Coin Creation Modal */}
+        <Dialog open={showCoinModal} onClose={() => setShowCoinModal(false)} className="fixed z-50 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <Dialog.Overlay className="fixed inset-0 bg-black/40" />
+            <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-xl max-w-md w-full mx-auto p-8 z-10">
+              <button
+                onClick={() => setShowCoinModal(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <FiX size={22} />
+              </button>
+              <Dialog.Title className="text-xl font-bold mb-4">Create Coin for this Post</Dialog.Title>
+              <form className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Coin Name</label>
+                  <input
+                    type="text"
+                    className="input input-bordered w-full"
+                    value={coinName}
+                    onChange={e => setCoinName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Symbol</label>
+                  <input
+                    type="text"
+                    className="input input-bordered w-full"
+                    value={coinSymbol}
+                    onChange={e => setCoinSymbol(e.target.value.toUpperCase())}
+                    maxLength={8}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Initial Supply</label>
+                  <input
+                    type="number"
+                    className="input input-bordered w-full"
+                    value={coinSupply}
+                    min={1}
+                    onChange={e => setCoinSupply(Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Royalty (%)</label>
+                  <input
+                    type="number"
+                    className="input input-bordered w-full"
+                    value={coinRoyalty}
+                    min={0}
+                    max={20}
+                    onChange={e => setCoinRoyalty(Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Description (optional)</label>
+                  <textarea
+                    className="input input-bordered w-full min-h-[60px]"
+                    value={coinDesc}
+                    onChange={e => setCoinDesc(e.target.value)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="w-full py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold shadow-lg hover:from-green-600 hover:to-emerald-600 transition mt-4"
+                  onClick={() => {/* TODO: handle create coin */}}
+                >
+                  Create Coin
+                </button>
+              </form>
+            </div>
+          </div>
+        </Dialog>
         <article className="bg-white shadow-xl rounded-2xl overflow-hidden">
           {(post.coverImage || post.cover_image) && (
             <div className="relative h-64 w-full overflow-hidden rounded-lg mb-8">
@@ -319,6 +439,49 @@ export default function PostPage() {
               className="prose max-w-none text-gray-700"
               dangerouslySetInnerHTML={{ __html: post.content }}
             />
+            
+            {/* Coin Information */}
+            {coinData && (
+              <div className="mt-8 p-6 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    <span className="w-6 h-6 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">🪙</span>
+                    </span>
+                    {coinData.name} ({coinData.symbol})
+                  </h3>
+                  <Link
+                    href={`https://testnet.zora.co/coin/bsep:${coinData.contract_address}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-purple-600 bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
+                  >
+                    <FiExternalLink className="mr-2" />
+                    View on Zora
+                  </Link>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-500 dark:text-gray-400">Contract Address</p>
+                    <p className="font-mono text-gray-900 dark:text-white truncate">
+                      {coinData.contract_address}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 dark:text-gray-400">Total Supply</p>
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      {coinData.total_supply?.toLocaleString() || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 dark:text-gray-400">Created</p>
+                    <p className="text-gray-900 dark:text-white">
+                      {coinData.created_at ? formatDistanceToNow(new Date(coinData.created_at), { addSuffix: true }) : 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             
             {post.tags && post.tags.length > 0 && (
               <div className="mt-8 pt-6 border-t border-gray-100">

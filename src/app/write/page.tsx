@@ -2,15 +2,18 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAccount } from 'wagmi'
-import { createClient } from '@supabase/supabase-js'
+import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
 import { toast } from 'react-hot-toast'
 import PostEditor from '@/components/PostEditor'
 import { motion } from 'framer-motion'
+import { uploadToIPFS, uploadFileToIPFS } from '@/lib/ipfs'
+import { supabase } from '@/lib/supabase'
 
 export default function WritePage() {
   const router = useRouter()
   const { address, isConnected } = useAccount()
+  const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient()
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
@@ -30,19 +33,27 @@ export default function WritePage() {
       metadata: {
         ...metadata,
         content: metadata.content ? '[...content]' : 'no content',
-        nftMetadata: metadata.nftMetadata ? '[...nftMetadata]' : 'no nftMetadata'
+        nftMetadata: metadata.nftMetadata ? '[...nftMetadata]' : 'no nftMetadata',
+        coinMetadata: metadata.coinMetadata ? '[...coinMetadata]' : 'no coinMetadata'
       },
       address: address || 'no address',
-      isNft: !!metadata.nftMetadata
+      isNft: !!metadata.nftMetadata,
+      hasCoin: !!metadata.coinMetadata
     })
     setIsLoading(true)
 
     try {
-      // Create Supabase client
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
+      // Show network switching notification if coin creation is needed
+      if (metadata.coinMetadata) {
+        toast('Switching to Base Sepolia network...', {
+          duration: 3000,
+          icon: '🔄',
+          style: {
+            background: '#3B82F6',
+            color: '#fff',
+          },
+        });
+      }
 
       // First, get or create user profile
       console.log('Fetching user profile for address:', address)
@@ -106,29 +117,20 @@ export default function WritePage() {
         throw new Error('No user ID available for post creation')
       }
 
-      // Prepare post data
+      // Create post FIRST
       const postData = {
         title: metadata.title,
         content: content,
-        metadata: {
-          ...metadata,
-          // Include NFT metadata in the metadata JSONB column
-          ...(metadata.is_nft && metadata.nftMetadata ? {
-            nft: {
-              mint_price: metadata.mintPrice || 0,
-              royalty_bps: metadata.royaltyBps || 0,
-              token_id: metadata.nftMetadata.tokenId || null,
-              contract_address: metadata.nftMetadata.contractAddress || null,
-              // Include any other NFT metadata you want to store
-              ...metadata.nftMetadata
-            }
-          } : {})
-        },
         author_id: userId,
+        ipfs_hash: metadata.coverImage || null,
+        is_nft: !!metadata.nftMetadata,
+        has_coin: !!metadata.coinMetadata,
+        nft_contract_address: metadata.nftMetadata?.contractAddress || null,
+        mint_price: metadata.nftMetadata?.price ? parseFloat(metadata.nftMetadata.price) : null,
+        royalty_bps: metadata.nftMetadata?.royaltyBps ? parseInt(metadata.nftMetadata.royaltyBps) : null,
         author_name: profile?.username || `user_${address.slice(0, 6)}`,
         address: address.toLowerCase(),
         status: 'published',
-        is_nft: metadata.is_nft || false, // Use the is_nft flag from metadata
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }
@@ -150,6 +152,9 @@ export default function WritePage() {
         throw new Error('Post was not created successfully')
       }
 
+      // SUCCESS: Post is now saved to Supabase
+      console.log('✅ Post successfully saved to Supabase with ID:', post.id)
+
       // Update user stats
       const { error: updateStatsError } = await supabase
         .from('user_stats')
@@ -164,7 +169,100 @@ export default function WritePage() {
         // Don't throw here, as the post was created successfully
       }
 
+      // Show success message for post creation
       toast.success('Post published successfully!')
+
+      // Now attempt coin deployment (AFTER post is saved)
+      if (metadata.coinMetadata) {
+        try {
+          console.log('🪙 Starting coin deployment...')
+          
+          // First, verify the user exists in the database
+          const { data: userCheck, error: userCheckError } = await supabase
+            .from('users')
+            .select('id, address')
+            .eq('id', userId)
+            .single()
+
+          if (userCheckError || !userCheck) {
+            throw new Error(`User not found in database: ${userId}`)
+          }
+
+          console.log('✅ User verified in database:', userCheck)
+
+          // Prepare coin metadata for IPFS
+          let coinImageUri: string
+          
+          if (metadata.coinMetadata?.image) {
+            const imageHash = await uploadFileToIPFS(metadata.coinMetadata.image)
+            coinImageUri = `ipfs://${imageHash}`
+          } else if (metadata.coverImage && metadata.coverImage.startsWith('ipfs://')) {
+            coinImageUri = metadata.coverImage
+          } else {
+            coinImageUri = 'ipfs://bafybeihj5z3b2g4d4q4z4y5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q'
+          }
+          
+          const coinMetadata: any = {
+            name: `${post.title} Coin`,
+            description: `Coin for post: ${post.title} on YourZ`,
+            external_url: typeof window !== 'undefined' ? `${window.location.origin}/post/${post.id}` : '',
+            image: coinImageUri,
+          }
+          
+          const metadataUri = await uploadToIPFS(coinMetadata)
+          console.log('✅ Coin metadata uploaded to IPFS:', metadataUri)
+
+          // Deploy the coin
+          const { deployZoraCoin } = await import('@/utils/zora')
+          const coinContractAddress = await deployZoraCoin({
+            name: coinMetadata.name,
+            symbol: metadata.coinMetadata.symbol,
+            uri: `ipfs://${metadataUri}`,
+            payoutRecipient: address,
+            platformReferrer: '0x0000000000000000000000000000000000000000',
+            chainId: 84532,
+            currency: 2,
+            mintFee: metadata.coinMetadata.mintFee || '0.000777',
+            mintFeeRecipient: address,
+            walletClient,
+            publicClient,
+            account: address,
+          })
+
+          console.log('✅ Coin deployed successfully:', coinContractAddress)
+          console.log('💾 Saving coin to database with creator_id:', address)
+          
+          // Save coin to post_coins table
+          const { error: coinError } = await supabase
+            .from('post_coins')
+            .insert({
+              post_id: post.id,
+              contract_address: coinContractAddress,
+              name: coinMetadata.name,
+              symbol: metadata.coinMetadata.symbol,
+              total_supply: 1000000,
+              creator_id: address.toLowerCase(), // Use wallet address instead of UUID
+              metadata_uri: metadataUri,
+              created_at: new Date().toISOString(),
+            })
+            .single()
+
+          if (coinError) {
+            console.error('❌ Error saving coin to database:', coinError)
+            throw new Error(`Failed to save coin: ${coinError.message}`)
+          }
+
+          console.log('✅ Coin saved to database successfully')
+          toast.success('Coin created successfully!')
+
+        } catch (error) {
+          console.error('❌ Error in coin deployment:', error)
+          toast.error('Post saved, but failed to create coin')
+          // Don't throw - post was already saved successfully
+        }
+      }
+
+      // Navigate to the post page
       router.push(`/post/${post.id}`)
     } catch (error) {
       console.error('Error in handleSave:', error)

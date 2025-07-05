@@ -12,20 +12,12 @@ import {
   Chain,
   Hex 
 } from 'viem';
-import { createConfig, configureChains, useConfig, useWriteContract, useSimulateContract } from 'wagmi';
-import { publicProvider } from 'wagmi/providers/public';
 import { waitForTransactionReceipt, writeContract} from "@wagmi/core"
 import { create1155, createCreatorClient, createNew1155Token } from '@zoralabs/protocol-sdk';
 import { createCoinCall, DeployCurrency } from "@zoralabs/coins-sdk";
 import { createCoin } from '@zoralabs/coins-sdk';
 import { base } from "viem/chains";
 import { uploadToIPFS } from './ipfs';
-
-// Define DeployCurrency enum as per Zora Coins SDK
-export enum DeployCurrency {
-  ZORA = 1,
-  ETH = 2,
-}
 
 // Base Sepolia chain configuration
 export const BASE_SEPOLIA_CHAIN_ID = 84532;
@@ -439,8 +431,6 @@ export async function create1155Contract({
   }
 }
 
-
-
 /**
  * Deploys a Zora Fungible Token (FT) contract
  * @param params Token parameters
@@ -730,113 +720,191 @@ export async function deployZoraFT({
 }
 
 /**
- * Deploys a Zora Coin contract
- * @param params Token parameters
- * @returns The deployed contract address
+ * Deploys a Zora Coin contract using the tested approach from TestZoraCoinSuite.
+ * @param {Object} params - Coin deployment parameters
+ * @param {string} params.name - Coin name
+ * @param {string} params.symbol - Coin symbol
+ * @param {string} params.uri - IPFS URI for metadata
+ * @param {string} params.payoutRecipient - Address to receive payouts
+ * @param {string} params.platformReferrer - Platform referrer address
+ * @param {number} params.chainId - Chain ID (default: Base Sepolia)
+ * @param {number} params.currency - Currency enum (DeployCurrency.ETH or ZORA)
+ * @param {string} params.mintFee - Mint fee in ETH (as string)
+ * @param {string} params.mintFeeRecipient - Address to receive mint fees
+ * @returns {Promise<`0x${string}`>} The deployed contract address
  */
+// Utility function to ensure we're on the correct network
+async function ensureBaseSepoliaNetwork() {
+  if (typeof window === 'undefined' || !window.ethereum) {
+    throw new Error('Ethereum provider not found');
+  }
+
+  try {
+    const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+    if (currentChainId !== '0x14a34') { // Base Sepolia chain ID in hex
+      console.log('Switching to Base Sepolia network...');
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x14a34' }],
+      });
+    }
+  } catch (switchError: any) {
+    // If the network doesn't exist in the wallet, add it
+    if (switchError.code === 4902) {
+      console.log('Adding Base Sepolia network to wallet...');
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: '0x14a34',
+          chainName: 'Base Sepolia',
+          nativeCurrency: {
+            name: 'ETH',
+            symbol: 'ETH',
+            decimals: 18,
+          },
+          rpcUrls: ['https://sepolia.base.org'],
+          blockExplorerUrls: ['https://sepolia.basescan.org'],
+        }],
+      });
+    } else {
+      throw new Error(`Failed to switch to Base Sepolia network: ${switchError.message}`);
+    }
+  }
+
+  // Small delay to ensure network switch is processed
+  await new Promise(resolve => setTimeout(resolve, 1000));
+}
+
 export async function deployZoraCoin({
   name,
   symbol,
-  initialSupply,
-  decimals = 18,
-  admin,
-  description = 'YourZ Coin'
-}: CreateZoraCoinParams): Promise<`0x${string}`> {
-  try {
-    if (!window.ethereum) {
-      throw new Error('Ethereum provider not found');
-    }
+  uri,
+  payoutRecipient,
+  platformReferrer = '0x0000000000000000000000000000000000000000',
+  chainId,
+  currency,
+  mintFee = '0.000777',
+  mintFeeRecipient,
+  walletClient,
+  publicClient,
+  account,
+}: {
+  name: string;
+  symbol: string;
+  uri: string;
+  payoutRecipient?: `0x${string}`;
+  platformReferrer?: `0x${string}`;
+  chainId?: number;
+  currency?: number;
+  mintFee?: string;
+  mintFeeRecipient?: `0x${string}`;
+  walletClient?: any;
+  publicClient?: any;
+  account?: `0x${string}`;
+}): Promise<`0x${string}`> {
+  if (typeof window === 'undefined' || !window.ethereum) {
+    throw new Error('Ethereum provider not found. This function must be called from the browser.');
+  }
+    try {
+    // Import dependencies
+    const { createWalletClient, custom } = await import('viem');
+    const { baseSepolia } = await import('viem/chains');
+    const { createCoin, DeployCurrency } = await import('@zoralabs/coins-sdk');
+    const { createPublicClient, http } = await import('viem');
 
-    // 1. Set up the wallet client
-    const walletClient = createWalletClient({
-      chain: baseSepoliaConfig,
-      transport: custom(window.ethereum)
+    // Ensure we're on the correct network
+    await ensureBaseSepoliaNetwork();
+
+    // Use provided clients or create new ones
+    const finalWalletClient = walletClient || createWalletClient({
+      chain: baseSepolia,
+      transport: custom(window.ethereum),
+      account: account
+    });
+    const finalPublicClient = publicClient || createPublicClient({
+      chain: baseSepolia,
+      transport: http()
     });
 
-    // 2. Get the account
-    const [account] = await walletClient.getAddresses();
+    // Verify we have a connected account
+    if (!finalWalletClient) {
+      throw new Error('Wallet client not available. Please connect your wallet.');
+    }
+
     if (!account) {
-      throw new Error('No accounts found');
+      throw new Error('Account not provided. Please provide a valid account address.');
     }
 
-    // 3. Create public client
-    const publicClient = createPublicClient({
-      chain: baseSepoliaConfig,
-      transport: http(baseSepoliaConfig.rpcUrls.default.http[0])
-    });
+    // Use provided or default values
+    const _chainId = chainId || baseSepolia.id;
+    const _currency = currency || DeployCurrency.ETH;
+    const _platformReferrer = platformReferrer || '0x0000000000000000000000000000000000000000';
+    const _mintFee = mintFee || '0.000777';
+    const _mintFeeRecipient = mintFeeRecipient || payoutRecipient || '0x0000000000000000000000000000000000000000';
+    const _payoutRecipient = payoutRecipient || '0x0000000000000000000000000000000000000000';
+    let _uri = uri || '';
+    if (!_uri.startsWith('ipfs://')) {
+      throw new Error('Coin metadata URI must start with ipfs://');
+    }
 
-    // 4. Create Zora client with explicit chain configuration
-    const zoraClient = createCreatorClient({
-      chain: {
-        ...baseSepoliaConfig,
-        // Ensure required chain properties are set
-        id: baseSepoliaConfig.id,
-        network: baseSepoliaConfig.network,
-        // Add required contract addresses for Zora protocol
-        contracts: {
-          zoraNFTCreator: {
-            address: '0x2d2d4bB7285F4eB4b1C4FE111CDfB1836De0e6c6',
-            blockCreated: 0,
-          },
-          zoraNFTCreatorProxy: {
-            address: '0x2d2d4bB7285F4eB4b1C4FE111CDfB1836De0e6c6',
-            blockCreated: 0,
-          },
-          zoraNFTCreatorV1: {
-            address: '0x2d2d4bB7285F4eB4b1C4FE111CDfB1836De0e6c6',
-            blockCreated: 0,
-          },
-        },
-      },
-      publicClient,
-      walletClient,
-      // Explicitly set the RPC URL
-      rpcUrl: baseSepoliaConfig.rpcUrls.default.http[0],
-    });
-
-    console.log('Deploying Zora Coin with params:', {
+    // Prepare coin parameters
+    const coinParams = {
       name,
       symbol,
-      initialSupply: initialSupply.toString(),
-      decimals,
-      admin: admin || account,
-      description
-    });
+      uri: _uri,
+      payoutRecipient: _payoutRecipient,
+      platformReferrer: _platformReferrer,
+      chainId: _chainId,
+      currency: _currency,
+      mintFee: _mintFee,
+      mintFeeRecipient: _mintFeeRecipient,
+    };
 
-    // 5. Deploy the Coin contract
-    const { hash } = await zoraClient.deployToken({
-      name,
-      symbol,
-      initialSupply: initialSupply.toString(),
-      decimals,
-      owner: admin || account,
-      metadata: {
-        name,
-        description,
-        symbol,
-        decimals,
-        initialSupply: initialSupply.toString()
-      }
-    });
-
-    // 6. Wait for deployment confirmation
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    // Deploy the coin - use the exact same pattern as TestZoraCoinSuite
+    console.log('Deploying coin with params:', coinParams);
+    console.log('Wallet client:', finalWalletClient);
+    console.log('Public client:', finalPublicClient);
     
-    if (!receipt.contractAddress) {
-      throw new Error('No contract address in receipt');
-    }
+    
+    const result = await createCoin(coinParams, finalWalletClient, finalPublicClient);
+    if (!result?.hash) throw new Error('No transaction hash returned from createCoin');
 
-    deployedCoinAddress = receipt.contractAddress as `0x${string}`;
-    console.log('Zora Coin deployed at:', deployedCoinAddress);
-    return deployedCoinAddress;
-
-  } catch (error) {
-    console.error('Error deploying Zora Coin:', {
-      error,
-      message: error?.message,
-      stack: error?.stack
+    // Wait for transaction confirmation
+    const receipt = await finalPublicClient.waitForTransactionReceipt({
+      hash: result.hash,
+      confirmations: 2,
     });
-    throw new Error(`Failed to deploy Zora Coin: ${error.message}`);
+    
+    console.log('Transaction receipt:', receipt);
+    
+    if (receipt.status !== 'success') {
+      throw new Error('Coin deployment transaction failed');
+    }
+    
+    // Prefer the address returned by the SDK result
+    let contractAddress = result.address || receipt.contractAddress;
+    
+    if (!contractAddress) {
+      // As a fallback, try to get the contract address from the transaction
+      try {
+        const tx = await finalPublicClient.getTransaction({ hash: result.hash });
+        console.log('Transaction details:', tx);
+        
+        if (tx.to === null) {
+          const sender = receipt.from;
+          const nonce = await finalPublicClient.getTransactionCount({ address: sender as `0x${string}` });
+          console.log('Contract creation transaction detected, sender:', sender, 'nonce:', nonce);
+        }
+      } catch (txError) {
+        console.error('Error getting transaction details:', txError);
+      }
+      throw new Error('Could not determine contract address from transaction receipt or result');
+    }
+    
+    return contractAddress;
+  } catch (error) {
+    console.error('Error deploying Zora Coin:', error);
+    throw new Error(error instanceof Error ? error.message : 'Failed to deploy Zora Coin');
   }
 }
 
@@ -1247,3 +1315,4 @@ export async function getContractDetails(contractAddress: `0x${string}`): Promis
     throw new Error(`Failed to fetch contract details: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
+

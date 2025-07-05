@@ -2,7 +2,7 @@
 // Uses @zoralabs/protocol-sdk
 // Assumes existence of uploadToIPFS utility
 
-import { createCreatorClient, create1155 } from '@zoralabs/protocol-sdk';
+import { createCreatorClient, create1155, createNew1155Token } from '@zoralabs/protocol-sdk';
 
 
 
@@ -57,6 +57,19 @@ export async function deployZora1155Contract({
     },
     account: account as `0x${string}`,
   });
+
+  // 4.5 Prepare the new contract creation parameters
+  // const{ parameters} = await create1155({
+  //   contract: {
+  //     name,
+  //     uri: metadataUrl,
+  //   },
+  //   token: {
+  //     tokenMetadataURI: metadataUrl,
+  //   },
+  //   account: account as `0x${string}`,
+  //   publicClient,
+  // })
 
   // 5. Return contract address and transaction hash (to be sent externally)
   return { contractAddress, parameters };
@@ -116,7 +129,7 @@ export async function deployAnotherZora1155Contract({
   });
 
   // 5. Return contract address and transaction hash (to be sent externally)
-  return { contractAddress, parameters };
+  return { parameters, contractAddress };
 }
 
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { uploadToIPFS, fetchFromIPFS } from '@/utils/ipfs'
+import { uploadToIPFS, getFromIPFS } from '@/lib/ipfs'
 import { toast } from 'react-hot-toast'
 
 // Simple type for our test metadata
@@ -138,7 +138,7 @@ export default function TestIPFSService() {
               <button
                 onClick={async () => {
                   try {
-                    const content = await fetchFromIPFS(result);
+                    const content = await getFromIPFS(result);
                     toast.success('Successfully fetched content');
                     console.log('Fetched content:', content);
                   } catch (error) {

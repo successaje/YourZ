@@ -99,7 +99,7 @@ export default function NFTPage() {
     );
   }
 
-  const priceInEth = nft.price ? formatEther(BigInt(nft.price)) : '0';
+  const priceInEth = nft.price || '0';
   const royaltyPercentage = (nft.royaltyBps / 100).toFixed(1);
 
   return (

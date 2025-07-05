@@ -18,6 +18,21 @@ const createIPFSClient = () => {
       }
 
       try {
+        // Ensure data is a valid JSON object
+        const jsonData = typeof data === 'string' ? JSON.parse(data) : data;
+        
+        // Add pinata metadata
+        const requestBody = {
+          pinataMetadata: {
+            name: 'metadata.json',
+            keyvalues: {
+              type: 'metadata',
+              timestamp: new Date().toISOString(),
+            },
+          },
+          pinataContent: jsonData,
+        };
+
         const response = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
           method: 'POST',
           headers: {
@@ -25,15 +40,22 @@ const createIPFSClient = () => {
             'pinata_api_key': pinataApiKey,
             'pinata_secret_api_key': pinataSecretKey,
           },
-          body: JSON.stringify(data),
+          body: JSON.stringify(requestBody),
         });
 
         if (!response.ok) {
-          const error = await response.text();
-          throw new Error(`Failed to upload to IPFS: ${error}`);
+          const errorText = await response.text();
+          console.error('Pinata API Error:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText,
+            headers: Object.fromEntries(response.headers.entries()),
+          });
+          throw new Error(`Failed to upload to IPFS: ${errorText}`);
         }
 
         const result = await response.json();
+        console.log('JSON uploaded to IPFS:', result);
         return result.IpfsHash;
       } catch (error) {
         console.error('Error uploading to IPFS:', error);
@@ -48,7 +70,23 @@ const createIPFSClient = () => {
 
       try {
         const formData = new FormData();
+        
+        // Create metadata for the file
+        const metadata = JSON.stringify({
+          name: file.name,
+          keyvalues: {
+            type: 'postImage',
+            uploadedAt: new Date().toISOString()
+          }
+        });
+        
         formData.append('file', file);
+        formData.append('pinataMetadata', metadata);
+        
+        const pinataOptions = JSON.stringify({
+          cidVersion: 0
+        });
+        formData.append('pinataOptions', pinataOptions);
 
         const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
           method: 'POST',
@@ -61,10 +99,12 @@ const createIPFSClient = () => {
 
         if (!response.ok) {
           const error = await response.text();
+          console.error('Pinata API Error:', error);
           throw new Error(`Failed to upload file to IPFS: ${error}`);
         }
 
         const result = await response.json();
+        console.log('File uploaded to IPFS:', result);
         return result.IpfsHash;
       } catch (error) {
         console.error('Error uploading file to IPFS:', error);

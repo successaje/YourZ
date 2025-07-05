@@ -1,141 +1,363 @@
-'use client'
+'use client';
 
-import { useAccount } from 'wagmi'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
-import { PlaceholderAvatar } from '@/components/PlaceholderAvatar'
-import { FaTwitter, FaGithub, FaDiscord, FaMedium, FaLink, FaTelegram, FaInstagram, FaNewspaper, FaEdit, FaHeart, FaUsers, FaBookmark, FaShare, FaClock } from 'react-icons/fa'
-import { SiMirror } from 'react-icons/si'
-import { toast } from 'react-hot-toast'
-import EditProfileModal from '@/components/EditProfileModal'
-import ZoraIntegration from '@/components/ZoraIntegration'
-import CreatePost from '@/components/CreatePost'
-import { Toaster } from 'react-hot-toast'
-import PostCard from '@/components/PostCard'
-import Link from 'next/link'
-import PostListItem from '@/components/PostListItem'
-import { createClient } from '@supabase/supabase-js'
+import { useAccount } from 'wagmi';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState, useMemo } from 'react';
+import { PlaceholderAvatar } from '@/components/PlaceholderAvatar';
+import Link from 'next/link';
+import { 
+  FaTwitter, FaGithub, FaDiscord, FaMedium, FaLink, 
+  FaTelegram, FaInstagram, FaNewspaper, FaEdit, 
+  FaHeart, FaUsers, FaBookmark, FaHistory, FaStar,
+  FaFire, FaClock, FaChartLine, FaCopy, FaCheck, FaCoins
+} from 'react-icons/fa';
+// Import the Tabs components from the correct path
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { toast, Toaster } from 'react-hot-toast';
+import EditProfileModal from '@/components/EditProfileModal';
+import { WalletActivities } from '../../components/WalletActivities';
+import { useWalletActivities } from '@/hooks/useWalletActivities';
+import { useUserCoins } from '@/hooks/useUserCoins';
+import CoinCard from '@/components/CoinCard';
+
+// Function to strip HTML tags from content
+const stripHtml = (html: string) => {
+  if (typeof document !== 'undefined') {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    return doc.body.textContent || '';
+  }
+  return html.replace(/<[^>]*>?/gm, '');
+};
+
+import { createClient } from '@supabase/supabase-js';
+
+// Define types
+interface UserStats {
+  posts_count: number;
+  followers_count: number;
+  following_count: number;
+  collections_count?: number;
+  nfts_count?: number;
+  total_likes?: number;
+}
+
+interface PostType {
+  id: string;
+  title: string;
+  content: string;
+  created_at: string;
+  type?: 'created' | 'collected' | 'shared';
+  metadata: {
+    image?: string;
+    tags?: string[];
+    [key: string]: unknown;
+  };
+  status: string;
+  is_nft?: boolean;
+  updated_at?: string;
+  address?: string;
+}
+
+interface User {
+  id: string;
+  address: string;
+  username: string;
+  ipfs_hash: string;
+  created_at: string;
+  bio: string | null;
+  level: number;
+  social_links: Record<string, string>;
+  email: string;
+  updated_at: string;
+  user_stats: UserStats[];
+  posts: PostType[];
+  activities?: Array<{
+    id: string;
+    type: string;
+    timestamp: string;
+    // Add other activity properties as needed
+  }>;
+}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-interface User {
-  id: string
-  address: string
-  username: string
-  ipfs_hash: string
-  created_at: string
-  bio: string | null
-  level: number
-  social_links: Record<string, string>
-  email: string
-  updated_at: string
-  user_stats: any[]
-  posts: any[]
-}
+// Helper to decode method from input
+const getMethod = (tx) => {
+  if (!tx.input || tx.input === '0x') return 'Transfer';
+  if (tx.to === '' || tx.to === null) return 'Contract Creation';
+  // Common ERC20/721/1155 methods
+  const sig = tx.input.slice(2, 10);
+  switch (sig) {
+    case 'a9059cbb': return 'Transfer'; // transfer(address,uint256)
+    case '095ea7b3': return 'Approve'; // approve(address,uint256)
+    case '23b872dd': return 'TransferFrom'; // transferFrom(address,address,uint256)
+    case '42842e0e': return 'SafeTransferFrom'; // safeTransferFrom(address,address,uint256)
+    case 'f242432a': return 'SafeTransferFrom1155'; // safeTransferFrom(address,address,uint256,uint256,bytes)
+    default: return 'Method: 0x' + sig;
+  }
+};
 
-interface Post {
-  id: string
-  title: string
-  content: string
-  created_at: string
-}
+// Helper to truncate and copy
+const Copyable = ({ text, truncate = 6 }) => {
+  const [copied, setCopied] = useState(false);
+  const short = text.length > 2 * truncate ? `${text.slice(0, truncate)}...${text.slice(-truncate)}` : text;
+  return (
+    <span className="inline-flex items-center gap-1 cursor-pointer group" onClick={() => {navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false), 1000);}}>
+      <span className="font-mono text-xs group-hover:underline">{short}</span>
+      {copied ? <FaCheck className="text-green-500 w-3 h-3" /> : <FaCopy className="text-gray-400 w-3 h-3 group-hover:text-blue-500" />}
+    </span>
+  );
+};
+
+// List-style PostCard for profile page
+const PostCard = ({ post }: { post: PostType }) => {
+  const getTypeColor = (type?: string) => {
+    switch(type) {
+      case 'created': return 'bg-gradient-to-r from-purple-500 to-pink-500';
+      case 'collected': return 'bg-gradient-to-r from-cyan-400 to-blue-500';
+      case 'shared': return 'bg-gradient-to-r from-green-400 to-teal-500';
+      default: return 'bg-gradient-to-r from-gray-500 to-gray-600';
+    }
+  };
+  const getTypeBadgeColor = (type?: string) => {
+    switch(type) {
+      case 'created': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
+      case 'collected': return 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200';
+      case 'shared': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
+    }
+  };
+  const getRandomTagColor = (index: number) => {
+    const colors = [
+      'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 border-blue-200 dark:border-blue-800',
+      'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200 border-purple-200 dark:border-purple-800',
+      'bg-pink-100 text-pink-800 dark:bg-pink-900/50 dark:text-pink-200 border-pink-200 dark:border-pink-800',
+      'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-200 border-rose-200 dark:border-rose-800',
+      'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200 border-orange-200 dark:border-orange-800',
+      'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200 border-amber-200 dark:border-amber-800',
+      'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200 border-yellow-200 dark:border-yellow-800',
+      'bg-lime-100 text-lime-800 dark:bg-lime-900/50 dark:text-lime-200 border-lime-200 dark:border-lime-800',
+      'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200 border-green-200 dark:border-green-800',
+      'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800',
+      'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-200 border-teal-200 dark:border-teal-800',
+      'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-200 border-cyan-200 dark:border-cyan-800',
+      'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200 border-sky-200 dark:border-sky-800',
+      'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800',
+      'bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-200 border-violet-200 dark:border-violet-800',
+      'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/50 dark:text-fuchsia-200 border-fuchsia-200 dark:border-fuchsia-800',
+    ];
+    return colors[index % colors.length];
+  };
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(date);
+  };
+  return (
+    <Link href={`/posts/${post.id}`} className="block">
+      <div className="group relative flex items-center gap-4 p-4 rounded-xl transition-all duration-300 hover:bg-opacity-5 hover:bg-white hover:shadow-lg dark:hover:bg-opacity-10 dark:hover:bg-black border border-gray-100 dark:border-gray-800/50 hover:border-opacity-50">
+        {/* Gradient accent */}
+        <div className={`absolute left-0 top-0 h-full w-1.5 ${getTypeColor(post.type)} rounded-l-lg`}></div>
+        {/* Post content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-2">
+            <span className={`text-xs font-medium px-3 py-1 rounded-full ${getTypeBadgeColor(post.type)}`}>{post.type ? post.type.charAt(0).toUpperCase() + post.type.slice(1) : 'Post'}</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 inline mr-1 -mt-0.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {formatDate(post.created_at)}
+            </span>
+          </div>
+          <h3 className="text-lg font-bold bg-gradient-to-r from-gray-800 to-gray-600 dark:from-gray-100 dark:to-gray-300 bg-clip-text text-transparent truncate">{post.title}</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mt-2 leading-relaxed">{stripHtml(post.content || '')}</p>
+          {Array.isArray(post.metadata?.tags) && post.metadata.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {post.metadata.tags.slice(0, 3).map((tag, index) => (
+                <span key={index} className={`text-xs px-2.5 py-1 rounded-full border ${getRandomTagColor(index)} font-medium`}>#{tag}</span>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Action button */}
+        <button className="p-2 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-all duration-300 hover:shadow-md hover:scale-105">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+    </Link>
+  );
+};
 
 export default function ProfilePage() {
-  const { address: connectedAddress, isConnected } = useAccount()
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const [isFollowing, setIsFollowing] = useState(false)
-  const [isFollowLoading, setIsFollowLoading] = useState(false)
-  const [isMigrating, setIsMigrating] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
-  const [activeTab, setActiveTab] = useState('posts')
-  const [isCreatingPost, setIsCreatingPost] = useState(false)
-  const [user, setUser] = useState<User | null>(null)
-  const [posts, setPosts] = useState<Post[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { address: connectedAddress, isConnected } = useAccount();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   
-  // Get address from URL parameters
-  const address = searchParams.get('address')
+  // State management
+  const [user, setUser] = useState<User | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState('posts');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [posts, setPosts] = useState<PostType[]>([]);
+  const [tabLoading, setTabLoading] = useState(false);
   
-  // Debug logs
-  console.log('URL address:', address)
-  console.log('Connected address:', connectedAddress)
-  console.log('User data:', user)
+  // Derived state
+  const address = searchParams?.get('address') || connectedAddress;
+  const isOwnProfile = address === connectedAddress;
+  
+  // Memoized filtered posts for each tab
+  const filteredPosts = useMemo(() => {
+    if (!user?.posts) return { posts: [], created: [], collected: [], activity: [] };
 
-  const isOwnProfile = connectedAddress?.toLowerCase() === address?.toLowerCase()
-
-  useEffect(() => {
-    if (!isConnected) {
-      router.push('/')
+    // Add debug logging
+    if (typeof window !== 'undefined') {
+      console.log('user.posts', user.posts);
     }
-  }, [isConnected, router])
 
+    // Only assign type if it exists, otherwise leave undefined
+    const allPosts = user.posts.map(post => ({
+      ...post,
+      // Do not default to 'created' if missing
+    }));
+
+    const created = allPosts.filter(post => post.type === 'created');
+    const collected = allPosts.filter(post => post.type === 'collected');
+    const activity = allPosts.filter(post => post.type === 'shared');
+
+    // Add debug logging
+    if (typeof window !== 'undefined') {
+      console.log('filteredPosts', {
+        posts: allPosts,
+        created,
+        collected,
+        activity
+      });
+    }
+
+    return {
+      posts: allPosts,
+      created,
+      collected,
+      activity
+    };
+  }, [user?.posts]);
+
+  const userStats = useMemo(() => {
+    if (!user?.user_stats || user.user_stats.length === 0) {
+      return {
+    posts_count: 0,
+    followers_count: 0,
+    following_count: 0,
+    collections_count: 0,
+    nfts_count: 0,
+    total_likes: 0
+  };
+    }
+    return user.user_stats[0];
+  }, [user?.user_stats]);
+
+  // Check follow status
   useEffect(() => {
     const checkFollowStatus = async () => {
-      if (!connectedAddress || !user || isOwnProfile) return
+      if (!address || !connectedAddress || address === connectedAddress) return;
+      
       try {
-        const response = await fetch(`/api/users/follow/status?followerAddress=${connectedAddress}&followedAddress=${user.address}`)
-        if (response.ok) {
-          const data = await response.json()
-          setIsFollowing(data.isFollowing)
+        const { data, error } = await supabase
+          .from('follows')
+          .select('*')
+          .eq('follower_address', connectedAddress.toLowerCase())
+          .eq('following_address', address.toLowerCase())
+          .single();
+        
+        if (!error && data) {
+          setIsFollowing(true);
         }
       } catch (error) {
-        console.error('Error checking follow status:', error)
+        console.error('Error checking follow status:', error);
       }
-    }
-    checkFollowStatus()
-  }, [connectedAddress, user, isOwnProfile])
+    };
+
+    checkFollowStatus();
+  }, [address, connectedAddress]);
 
   const handleFollow = async () => {
-    if (!connectedAddress || !user || isOwnProfile) return
-    setIsFollowLoading(true)
+    if (!connectedAddress || !address) return;
+    
+    setIsFollowLoading(true);
     try {
-      const response = await fetch('/api/users/follow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ followerAddress: connectedAddress, followedAddress: user.address })
-      })
-      if (response.ok) {
-        setIsFollowing(!isFollowing)
+      if (isFollowing) {
+        // Unfollow
+        const { error } = await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_address', connectedAddress.toLowerCase())
+          .eq('following_address', address.toLowerCase());
+        
+        if (!error) {
+          setIsFollowing(false);
+          toast.success('Unfollowed successfully');
+        }
+      } else {
+        // Follow
+        const { error } = await supabase
+          .from('follows')
+          .insert({
+            follower_address: connectedAddress.toLowerCase(),
+            following_address: address.toLowerCase(),
+            created_at: new Date().toISOString()
+          });
+        
+        if (!error) {
+          setIsFollowing(true);
+          toast.success('Followed successfully');
+        }
       }
     } catch (error) {
-      console.error('Error following user:', error)
+      console.error('Error following/unfollowing:', error);
+      toast.error('Failed to follow/unfollow');
     } finally {
-      setIsFollowLoading(false)
+      setIsFollowLoading(false);
     }
-  }
+  };
 
   const handleSaveProfile = async (data: any) => {
-    if (!connectedAddress) return
+    if (!user) return;
+    
     try {
-      console.log('Sending profile update request:', { address: connectedAddress, data })
-      const response = await fetch('/api/users/profile/update', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: connectedAddress, ...data })
-      })
-
-      const responseData = await response.json()
-      console.log('Profile update response:', responseData)
-
-      if (!response.ok) {
-        throw new Error(responseData.details || responseData.error || 'Failed to update profile')
-      }
-
-      setUser(responseData)
-      setIsEditing(false)
-      toast.success('Profile updated successfully')
+      const { error } = await supabase
+        .from('users')
+        .update({
+          username: data.username,
+          bio: data.bio,
+          social_links: data.social_links,
+          updated_at: new Date().toISOString()
+        })
+        .eq('address', user.address);
+      
+      if (error) throw error;
+      
+      setUser(prev => prev ? { ...prev, ...data } : null);
+      setIsEditing(false);
+      toast.success('Profile updated successfully');
     } catch (error) {
-      console.error('Error updating profile:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to update profile')
-      throw error
+      console.error('Error updating profile:', error);
+      toast.error('Failed to update profile');
     }
-  }
+  };
 
+  // Fetch user data
   useEffect(() => {
     const fetchUserData = async () => {
       if (!address) {
@@ -196,6 +418,24 @@ export default function ProfilePage() {
 
     fetchUserData()
   }, [address])
+
+  // Handle tab change with loading state
+  const handleTabChange = (newTab: string) => {
+    setActiveTab(newTab);
+    setTabLoading(true);
+    // Simulate loading for better UX
+    setTimeout(() => setTabLoading(false), 300);
+  };
+
+  // Use the wallet activities hook for the activity tab
+  const { activities, loading: activityLoading, error: activityError } = useWalletActivities(
+    activeTab === 'activity' ? (searchParams?.get('address') || connectedAddress) : undefined
+  );
+
+  // Use the user coins hook for the coins tab
+  const userCoins = useUserCoins(
+    activeTab === 'coins' ? (searchParams?.get('address') || connectedAddress) : undefined
+  );
 
   if (!isConnected) {
     return (
@@ -294,20 +534,39 @@ export default function ProfilePage() {
                   <div className="flex items-center gap-2">
                     <FaUsers className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                     <div>
-                      <span className="font-medium text-gray-900 dark:text-white">0</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{userStats.followers_count}</span>
                       <span className="text-gray-500 dark:text-gray-400 ml-1">Followers</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <FaUsers className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                     <div>
-                      <span className="font-medium text-gray-900 dark:text-white">0</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{userStats.following_count}</span>
                       <span className="text-gray-500 dark:text-gray-400 ml-1">Following</span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
+            <div className="flex gap-3">
+              {!isOwnProfile && (
+                <button
+                  onClick={handleFollow}
+                  disabled={isFollowLoading}
+                  className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    isFollowing
+                      ? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      : 'bg-purple-600 text-white hover:bg-purple-700'
+                  }`}
+                >
+                  {isFollowLoading ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
+                  ) : (
+                    <FaHeart className="w-4 h-4 mr-2" />
+                  )}
+                  {isFollowing ? 'Following' : 'Follow'}
+                </button>
+              )}
             {isOwnProfile && (
               <button
                 onClick={() => setIsEditing(true)}
@@ -317,225 +576,249 @@ export default function ProfilePage() {
                 Edit Profile
               </button>
             )}
+            </div>
           </div>
 
           {/* User Stats */}
-          {user.user_stats && (
-            <div className="mt-6 grid grid-cols-4 gap-4">
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {user.user_stats.posts_count || 0}
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">Posts</div>
+          <div className="mt-6 grid grid-cols-4 gap-4">
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                {userStats.posts_count}
               </div>
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {user.user_stats.collections_count || 0}
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">Collections</div>
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {user.user_stats.nfts_count || 0}
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">NFTs</div>
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {user.user_stats.total_likes || 0}
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">Likes</div>
-              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Posts</div>
             </div>
-          )}
-
-          {/* Social Links */}
-          {user.social_links && Object.keys(user.social_links).length > 0 && (
-            <div className="mt-6 flex gap-4">
-              {user.social_links.twitter && (
-                <a
-                  href={user.social_links.twitter}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                >
-                  <FaTwitter className="w-5 h-5" />
-                </a>
-              )}
-              {user.social_links.github && (
-                <a
-                  href={user.social_links.github}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                >
-                  <FaGithub className="w-5 h-5" />
-                </a>
-              )}
-              {/* Add other social links similarly */}
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                {userStats.followers_count}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Followers</div>
             </div>
-          )}
-        </div>
-
-        {/* Tabs */}
-        <div className="mt-8">
-          <div className="border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <nav className="-mb-px flex space-x-8">
-                <button
-                  onClick={() => setActiveTab('posts')}
-                  className={`${
-                    activeTab === 'posts'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
-                >
-                  Posts
-                </button>
-                <button
-                  onClick={() => setActiveTab('collections')}
-                  className={`${
-                    activeTab === 'collections'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
-                >
-                  Collections
-                </button>
-              </nav>
-              {isOwnProfile && activeTab === 'posts' && (
-                <Link href="/write" className="group">
-                  <button
-                    className="inline-flex items-center px-5 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-[#6E44FF] to-[#8E54E9] hover:from-[#5D3BFF] hover:to-[#7A4AFF] rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#6E44FF]/50 transition-all duration-200 ease-in-out transform hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[#6E44FF]/20 active:translate-y-0"
-                  >
-                    <FaNewspaper className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
-                    Create Post
-                    <span className="ml-1.5 group-hover:translate-x-1 transition-transform">→</span>
-                  </button>
-                </Link>
-              )}
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                {userStats.following_count}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Following</div>
             </div>
-          </div>
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                {userCoins.coins?.length || 0}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Coins</div>
+            </div>
+            </div>
+          
+          <div className="mt-8">
+            <div>
+              <Tabs 
+                value={activeTab} 
+                onValueChange={handleTabChange} 
+                className="w-full transition-all duration-300 ease-in-out"
+              >
+                <TabsList className="grid w-full grid-cols-4 mb-6 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg transition-colors duration-300">
+                  {[
+                    { key: 'posts', label: 'Posts', icon: FaNewspaper, count: filteredPosts.posts.length },
+                    { key: 'coins', label: 'Coins', icon: FaCoins, count: userCoins?.coins?.length || 0 },
+                    { key: 'collected', label: 'Collected', icon: FaBookmark, count: filteredPosts.collected.length },
+                    { key: 'activity', label: 'Activity', icon: FaHistory, count: filteredPosts.activity.length }
+                  ].map(({ key, label, icon: Icon, count }) => (
+                    <TabsTrigger 
+                      key={key}
+                      value={key}
+                      className="relative flex items-center justify-center gap-2 px-4 py-3 rounded-md transition-all duration-300 ease-in-out
+                        data-[state=active]:bg-white data-[state=active]:dark:bg-gray-700 
+                        data-[state=active]:shadow-lg data-[state=active]:text-purple-600 
+                        data-[state=active]:dark:text-purple-400 font-medium text-gray-500 
+                        dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200
+                        overflow-hidden group"
+                    >
+                      <span className="relative z-10 flex items-center gap-2">
+                        <Icon className="h-4 w-4 transition-transform duration-300 group-data-[state=active]:scale-110" />
+                        <span className="transition-all duration-300 group-data-[state=active]:font-semibold">
+                          {label}
+                        </span>
+                        <span className="text-xs bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full">
+                          {count}
+                        </span>
+                      </span>
+                      {/* Active indicator */}
+                      <span className="absolute bottom-0 left-0 w-full h-0.5 bg-gradient-to-r from-purple-500 to-pink-500 transform scale-x-0 group-data-[state=active]:scale-x-100 transition-transform duration-300 origin-left"></span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
 
-          <div className="mt-6">
-            {activeTab === 'posts' && (
-              <div className="space-y-6">
-                {!user.posts || user.posts.length === 0 ? (
-                  <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
-                    <p className="text-gray-500 dark:text-gray-400">
-                      {isOwnProfile
-                        ? "You haven't created any posts yet. Start sharing your thoughts!"
-                        : "This user hasn't created any posts yet."}
-                    </p>
+                <TabsContent 
+                  value="posts" 
+                  className="relative mt-6 overflow-hidden transition-all duration-300 ease-in-out"
+                >
+                  {tabLoading ? (
+                    <div className="space-y-4 animate-pulse">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-24 bg-gray-200 dark:bg-gray-700 rounded-lg relative overflow-hidden">
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                  <div className="space-y-2 divide-y divide-gray-100 dark:divide-gray-800 animate-fadeIn">
+                      {filteredPosts.posts.length > 0 ? (
+                        filteredPosts.posts.map((post) => (
+                        <PostCard key={post.id} post={post} />
+                      ))
+                    ) : (
+                      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full mb-4">
+                            <FaNewspaper className="w-8 h-8 text-gray-400" />
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">No posts yet</h3>
+                        <p className="mt-1">When you create posts, they'll appear here</p>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {user.posts.map((post: any) => (
-                      <div 
-                        key={post.id}
-                        className="py-6 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                      >
-                        <Link href={`/posts/${post.id}`} className="block">
-                          <div className="px-4">
-                            {/* Header with profile and metadata */}
-                            <div className="flex items-center justify-between mb-4">
-                              <div className="flex items-center space-x-3">
-                                <PlaceholderAvatar
-                                  address={user.address}
-                                  name={user.username}
-                                  size={40}
-                                  className="rounded-full"
-                                />
-                                <div>
-                                  <h4 className="font-medium text-gray-900 dark:text-white">
-                                    {user.username}
-                                  </h4>
-                                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                                    {new Date(post.created_at).toLocaleDateString()}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-4">
-                                {post.is_nft && (
-                                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary/10 text-primary">
-                                    <FaBookmark className="w-4 h-4 mr-1" />
-                                    NFT
-                                  </span>
-                                )}
-                                <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
-                                  <span className="flex items-center">
-                                    <FaShare className="w-4 h-4 mr-1" />
-                                    Share
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
+                  )}
+                </TabsContent>
+                
+                <TabsContent 
+                  value="coins"
+                  className="relative mt-6 overflow-hidden transition-all duration-300 ease-in-out"
+                >
+                  {userCoins.loading ? (
+                    <div className="space-y-4 animate-pulse">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-64 bg-gray-200 dark:bg-gray-700 rounded-lg relative overflow-hidden">
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : userCoins.error ? (
+                    <div className="text-center py-12 text-red-500">{userCoins.error}</div>
+                  ) : userCoins.coins && userCoins.coins.length > 0 ? (
+                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 animate-fadeIn">
+                      {userCoins.coins.map((coin) => (
+                        <CoinCard key={coin.id} coin={coin} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                      <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full mb-4">
+                        <FaCoins className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">No coins created</h3>
+                      <p className="mt-1">When you create posts with coins, they'll appear here</p>
+                    </div>
+                  )}
+                </TabsContent>
 
-                            {/* Main content */}
-                            <div className="flex gap-6">
-                              <div className="flex-1">
-                                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3 line-clamp-2">
-                                  {post.title}
-                                </h3>
-                                <div 
-                                  className="text-gray-600 dark:text-gray-300 line-clamp-3 prose dark:prose-invert max-w-none mb-4"
-                                  dangerouslySetInnerHTML={{ __html: post.content }}
-                                />
-                                <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-                                  <span className="flex items-center gap-1">
-                                    <FaNewspaper className="w-4 h-4" />
-                                    {post.status === 'published' ? 'Published' : 'Draft'}
-                                  </span>
-                                  <span className="flex items-center gap-1">
-                                    <FaClock className="w-4 h-4" />
-                                    {new Date(post.updated_at).toLocaleDateString()}
-                                  </span>
+                <TabsContent 
+                  value="collected"
+                  className="relative mt-6 overflow-hidden transition-all duration-300 ease-in-out"
+                >
+                  {tabLoading ? (
+                    <div className="space-y-4 animate-pulse">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-24 bg-gray-200 dark:bg-gray-700 rounded-lg relative overflow-hidden">
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                  <div className="space-y-2 divide-y divide-gray-100 dark:divide-gray-800 animate-fadeIn">
+                      {filteredPosts.collected.length > 0 ? (
+                        filteredPosts.collected.map((post) => (
+                          <PostCard key={post.id} post={post} />
+                        ))
+                    ) : (
+                      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full mb-4">
+                            <FaBookmark className="w-8 h-8 text-gray-400" />
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">No collected items</h3>
+                        <p className="mt-1">Your collected posts will appear here</p>
+                      </div>
+                    )}
+                  </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent 
+                  value="activity"
+                  className="relative mt-6 overflow-hidden transition-all duration-300 ease-in-out"
+                >
+                  {activityLoading ? (
+                    <div className="space-y-4 animate-pulse">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-24 bg-gray-200 dark:bg-gray-700 rounded-lg relative overflow-hidden">
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : activityError ? (
+                    <div className="text-center py-12 text-red-500">{activityError}</div>
+                  ) : activities.length > 0 ? (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
+                      {activities.map((tx) => {
+                        const method = getMethod(tx);
+                        const isIncoming = tx.to?.toLowerCase() === (searchParams?.get('address') || connectedAddress)?.toLowerCase();
+                        return (
+                          <div
+                            key={tx.hash}
+                            className="relative bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-5 shadow-sm hover:shadow-lg transition-all duration-200 flex flex-col gap-2"
+                          >
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className={`px-2 py-0.5 rounded text-xs font-semibold tracking-wide ${
+                                method === 'Transfer' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' :
+                                method === 'Approve' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200' :
+                                method === 'Contract Creation' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200' :
+                                'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-200'
+                              }`}>{method}</span>
+                              <span className="ml-auto text-xs text-gray-400">{new Date(Number(tx.timeStamp) * 1000).toLocaleString()}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-gray-500">Hash:</span>
+                              <Copyable text={tx.hash} truncate={8} />
                                 </div>
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-gray-500">From:</span>
+                              <Copyable text={tx.from} />
                               </div>
-                              <div className="flex flex-col items-end gap-4">
-                                {post.metadata?.cover_image && (
-                                  <div className="flex-shrink-0 w-32 h-32 relative">
-                                    <img
-                                      src={post.metadata.cover_image}
-                                      alt={post.title}
-                                      className="w-full h-full object-cover rounded-lg"
-                                    />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent rounded-lg flex items-end justify-center p-2">
-                                      <span className="text-white text-sm font-medium">YourZ</span>
-                                    </div>
-                                  </div>
-                                )}
-                                <div className="flex-shrink-0 w-32 h-32 relative bg-gradient-to-br from-primary/30 via-primary/20 to-primary/10 rounded-lg p-4 flex flex-col items-center justify-center text-center border border-primary/20 shadow-sm">
-                                  <div className="text-2xl font-bold text-primary mb-2">YourZ</div>
-                                  <div className="text-xs text-gray-600 dark:text-gray-400">
-                                    Write, Mint & Earn
-                                  </div>
-                                </div>
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-gray-500">To:</span>
+                              <Copyable text={tx.to} />
                               </div>
+                            <div className="flex items-center gap-2 text-xs mt-2">
+                              <span className="text-gray-500">Value:</span>
+                              <span className={`font-bold text-base ${isIncoming ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{Number(tx.value) / 1e18} ETH</span>
                             </div>
                           </div>
-                        </Link>
+                        );
+                      })}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                    ) : (
+                      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full mb-4">
+                        <FaHistory className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">No transactions found</h3>
+                      <p className="mt-1">Your recent transactions will appear here</p>
+                      </div>
+                    )}
+                </TabsContent>
+              </Tabs>
+            </div>
           </div>
+
+          {/* Edit Profile Modal */}
+          {isEditing && user && (
+            <EditProfileModal
+              isOpen={isEditing}
+              profile={user}
+              onClose={() => setIsEditing(false)}
+              onSave={handleSaveProfile}
+            />
+          )}
+
+          <Toaster position="bottom-right" />
         </div>
-
-        {/* Edit Profile Modal */}
-        {isEditing && (
-          <EditProfileModal
-            isOpen={isEditing}
-            profile={user}
-            onClose={() => setIsEditing(false)}
-            onSave={handleSaveProfile}
-          />
-        )}
-
-        <Toaster position="bottom-right" />
       </div>
     </div>
-  )
-} 
+  );
+}

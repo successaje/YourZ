@@ -97,6 +97,22 @@ export default function Header() {
                 >
                   Marketplace
                 </Link>
+                <Link
+                  href="/coins"
+                  className={`text-sm font-medium ${
+                    pathname === '/coins'
+                      ? 'text-primary-500'
+                      : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                  }`}
+                >
+                  Coins
+                </Link>
+                <Link
+                  href="/trade"
+                  className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                  Trade
+                </Link>
                 <div className="relative dropdown-container">
                   <button
                     onClick={() => setIsExploreOpen(!isExploreOpen)}

@@ -1,18 +1,29 @@
 'use client'
 
-import { Suspense } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import { useAccount } from 'wagmi'
 import Link from 'next/link'
 import { BannerSlider } from '@/components/BannerSlider'
 import { RecommendedArtists } from '@/components/RecommendedArtists'
 import { UserEarnings } from '@/components/UserEarnings'
 import PostsList from '@/components/PostsList'
+import TrendingCoins from '@/components/TrendingCoins'
+import { Clock, Flame, Star, Users, Zap, TrendingUp, BookOpen, Award, Calendar } from 'lucide-react'
 
 export default function Home() {
   const { address } = useAccount()
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [activeFilter, setActiveFilter] = useState('featured')
+
+  const filterTabs = [
+    { id: 'featured', label: 'Featured', icon: <Star className="h-4 w-4" /> },
+    { id: 'latest', label: 'Latest', icon: <Clock className="h-4 w-4" /> },
+    { id: 'trending', label: 'Trending', icon: <Flame className="h-4 w-4" /> },
+    { id: 'popular', label: 'Popular', icon: <TrendingUp className="h-4 w-4" /> },
+  ]
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Banner Slider */}
       <div className="bg-gradient-to-r from-blue-500 to-purple-600 py-8 relative">
         <div className="container mx-auto px-4">
@@ -33,32 +44,125 @@ export default function Home() {
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-12">
+      <div className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Left Column - Main Content */}
-          <div className="lg:col-span-3 space-y-8">
-            <Suspense fallback={
-              <div className="space-y-4">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-32 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse"></div>
-                ))}
+          <div className="lg:col-span-3">
+            {/* Filter Tabs */}
+            <div className="mb-8">
+              <div className="border-b border-gray-200 dark:border-gray-700">
+                <nav className="-mb-px flex space-x-8 overflow-x-auto">
+                  {filterTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveFilter(tab.id)}
+                      className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-colors ${
+                        activeFilter === tab.id
+                          ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+                      }`}
+                    >
+                      {tab.icon}
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </nav>
               </div>
-            }>
-              <PostsList showFeatured={true} limit={10} />
-            </Suspense>
+            </div>
+
+            {/* Content based on active filter */}
+            <div className="mb-8">
+              <Suspense fallback={
+                <div className="space-y-4">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i} className="h-24 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse"></div>
+                  ))}
+                </div>
+              }>
+                <PostsList 
+                  showFeatured={activeFilter === 'featured'} 
+                  limit={15} 
+                  category={activeFilter as 'featured' | 'latest' | 'trending' | 'popular'}
+                />
+              </Suspense>
+            </div>
+
+            {/* Load More Button */}
+            <div className="text-center py-8">
+              <button 
+                className="px-8 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+                onClick={() => {
+                  setIsLoadingMore(true)
+                  // Simulate loading more posts
+                  setTimeout(() => setIsLoadingMore(false), 1000)
+                }}
+                disabled={isLoadingMore}
+              >
+                {isLoadingMore ? 'Loading...' : 'Load More Posts'}
+              </button>
+            </div>
           </div>
           
           {/* Right Column - Sidebar */}
-          <div className="space-y-8">
+          <div className="space-y-6">
+            {/* Trending Coins - Moved Up */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white flex items-center gap-2">
+                <span className="w-5 h-5 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">🪙</span>
+                </span>
+                Trending Coins
+              </h3>
+              <TrendingCoins />
+            </div>
+
             {/* User Earnings */}
             {address && (
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
                 <UserEarnings />
               </div>
             )}
             
+            {/* Platform Stats */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-green-500" />
+                Platform Stats
+              </h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Total Posts</span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">1,247</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-purple-500" />
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Active Writers</span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">342</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Award className="h-4 w-4 text-yellow-500" />
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Coins Created</span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">89</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-green-500" />
+                    <span className="text-sm text-gray-600 dark:text-gray-400">This Week</span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">+23</span>
+                </div>
+              </div>
+            </div>
+            
             {/* Recommended Artists */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
               <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Recommended Creators</h3>
               <RecommendedArtists />
             </div>
@@ -76,6 +180,31 @@ export default function Home() {
                 <button className="px-4 py-2 bg-white text-blue-600 text-sm font-medium rounded-lg hover:bg-gray-100 transition-colors">
                   Subscribe
                 </button>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Quick Actions</h3>
+              <div className="space-y-3">
+                <Link
+                  href="/write"
+                  className="block w-full px-4 py-3 bg-blue-600 text-white text-center rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Write a Post
+                </Link>
+                <Link
+                  href="/marketplace"
+                  className="block w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-center rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
+                >
+                  Browse Marketplace
+                </Link>
+                <Link
+                  href="/coins"
+                  className="block w-full px-4 py-3 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 text-center rounded-lg hover:bg-yellow-200 dark:hover:bg-yellow-900/30 transition-colors font-medium"
+                >
+                  View All Coins
+                </Link>
               </div>
             </div>
           </div>
