@@ -141,6 +141,22 @@ export default function CoinCard({ coin }: CoinCardProps) {
         </div>
       </div>
 
+      {/* Action Buttons */}
+      <div className="flex gap-2 mt-4">
+        <button
+          onClick={() => copyToClipboard(coin.contract_address, 'Contract address')}
+          className="flex-1 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+        >
+          Copy Address
+        </button>
+        <a
+          href={`/trade?coin=${coin.contract_address}&symbol=${coin.symbol}`}
+          className="flex-1 px-3 py-2 text-sm bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-colors text-center"
+        >
+          Trade
+        </a>
+      </div>
+
       {/* Footer */}
       <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
         <span>Created: {formatDate(coin.created_at)}</span>

@@ -97,7 +97,7 @@ export function PostCoinInfo({
             </div>
           </div>
           
-          <div className="pt-2">
+          <div className="pt-2 space-y-2">
             <Button 
               variant="outline" 
               size="sm" 
@@ -106,6 +106,19 @@ export function PostCoinInfo({
             >
               <ExternalLink className="mr-2 h-4 w-4" />
               View on Explorer
+            </Button>
+            <Button 
+              variant="default" 
+              size="sm" 
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+              onClick={() => {
+                window.location.href = `/trade?coin=${postCoin.contract_address}&symbol=${postCoin.symbol}`;
+              }}
+            >
+              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+              Trade
             </Button>
           </div>
         </div>

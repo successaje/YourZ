@@ -141,6 +141,16 @@ export default function TrendingCoins() {
               
               <div className="flex gap-1 ml-2">
                 <Link
+                  href={`/trade?coin=${coin.contract_address}&symbol=${coin.symbol}`}
+                  className="p-1.5 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 transition-colors"
+                  title="Trade"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                </Link>
+                <Link
                   href={`https://testnet.zora.co/coin/bsep:${coin.contract_address}`}
                   target="_blank"
                   rel="noopener noreferrer"
