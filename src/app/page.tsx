@@ -8,6 +8,7 @@ import { RecommendedArtists } from '@/components/RecommendedArtists'
 import { UserEarnings } from '@/components/UserEarnings'
 import PostsList from '@/components/PostsList'
 import TrendingCoins from '@/components/TrendingCoins'
+import AvailableCollections from '@/components/AvailableCollections'
 import { Clock, Flame, Star, Users, Zap, TrendingUp, BookOpen, Award, Calendar } from 'lucide-react'
 
 export default function Home() {
@@ -114,6 +115,17 @@ export default function Home() {
                 Trending Coins
               </h3>
               <TrendingCoins />
+            </div>
+
+            {/* Available Collections - New */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white flex items-center gap-2">
+                <span className="w-5 h-5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">🖼️</span>
+                </span>
+                Available Collections
+              </h3>
+              <AvailableCollections />
             </div>
 
             {/* User Earnings */}

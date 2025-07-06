@@ -9,7 +9,8 @@ import {
   FaTwitter, FaGithub, FaDiscord, FaMedium, FaLink, 
   FaTelegram, FaInstagram, FaNewspaper, FaEdit, 
   FaHeart, FaUsers, FaBookmark, FaHistory, FaStar,
-  FaFire, FaClock, FaChartLine, FaCopy, FaCheck, FaCoins
+  FaFire, FaClock, FaChartLine, FaCopy, FaCheck, FaCoins,
+  FaImage
 } from 'react-icons/fa';
 // Import the Tabs components from the correct path
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
@@ -18,7 +19,9 @@ import EditProfileModal from '@/components/EditProfileModal';
 import { WalletActivities } from '../../components/WalletActivities';
 import { useWalletActivities } from '@/hooks/useWalletActivities';
 import { useUserCoins } from '@/hooks/useUserCoins';
+import { useUserNFTs } from '@/hooks/useUserNFTs';
 import CoinCard from '@/components/CoinCard';
+import NFTCard from '@/components/NFTCard';
 
 // Function to strip HTML tags from content
 const stripHtml = (html: string) => {
@@ -437,6 +440,11 @@ export default function ProfilePage() {
     activeTab === 'coins' ? (searchParams?.get('address') || connectedAddress) : undefined
   );
 
+  // Use the user NFTs hook for the nfts tab
+  const userNFTs = useUserNFTs(
+    activeTab === 'nfts' ? (searchParams?.get('address') || connectedAddress) : undefined
+  );
+
   if (!isConnected) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
@@ -580,7 +588,7 @@ export default function ProfilePage() {
           </div>
 
           {/* User Stats */}
-          <div className="mt-6 grid grid-cols-4 gap-4">
+          <div className="mt-6 grid grid-cols-5 gap-4">
             <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
               <div className="text-2xl font-bold text-gray-900 dark:text-white">
                 {userStats.posts_count}
@@ -605,6 +613,12 @@ export default function ProfilePage() {
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400">Coins</div>
             </div>
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                {userNFTs.nfts?.length || 0}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">NFTs</div>
+            </div>
             </div>
           
           <div className="mt-8">
@@ -618,7 +632,7 @@ export default function ProfilePage() {
                   {[
                     { key: 'posts', label: 'Posts', icon: FaNewspaper, count: filteredPosts.posts.length },
                     { key: 'coins', label: 'Coins', icon: FaCoins, count: userCoins?.coins?.length || 0 },
-                    { key: 'collected', label: 'Collected', icon: FaBookmark, count: filteredPosts.collected.length },
+                    { key: 'nfts', label: 'NFTs', icon: FaImage, count: userNFTs?.nfts?.length || 0 },
                     { key: 'activity', label: 'Activity', icon: FaHistory, count: filteredPosts.activity.length }
                   ].map(({ key, label, icon: Icon, count }) => (
                     <TabsTrigger 
@@ -709,33 +723,33 @@ export default function ProfilePage() {
                 </TabsContent>
 
                 <TabsContent 
-                  value="collected"
+                  value="nfts"
                   className="relative mt-6 overflow-hidden transition-all duration-300 ease-in-out"
                 >
-                  {tabLoading ? (
+                  {userNFTs.loading ? (
                     <div className="space-y-4 animate-pulse">
                       {[1, 2, 3].map((i) => (
-                        <div key={i} className="h-24 bg-gray-200 dark:bg-gray-700 rounded-lg relative overflow-hidden">
+                        <div key={i} className="h-64 bg-gray-200 dark:bg-gray-700 rounded-lg relative overflow-hidden">
                           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"></div>
                         </div>
                       ))}
                     </div>
+                  ) : userNFTs.error ? (
+                    <div className="text-center py-12 text-red-500">{userNFTs.error}</div>
+                  ) : userNFTs.nfts && userNFTs.nfts.length > 0 ? (
+                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 animate-fadeIn">
+                      {userNFTs.nfts.map((nft) => (
+                        <NFTCard key={nft.id} nft={nft} />
+                      ))}
+                    </div>
                   ) : (
-                  <div className="space-y-2 divide-y divide-gray-100 dark:divide-gray-800 animate-fadeIn">
-                      {filteredPosts.collected.length > 0 ? (
-                        filteredPosts.collected.map((post) => (
-                          <PostCard key={post.id} post={post} />
-                        ))
-                    ) : (
-                      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                                          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                         <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full mb-4">
-                            <FaBookmark className="w-8 h-8 text-gray-400" />
-                        </div>
-                        <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">No collected items</h3>
-                        <p className="mt-1">Your collected posts will appear here</p>
+                        <FaImage className="w-8 h-8 text-gray-400" />
                       </div>
-                    )}
-                  </div>
+                      <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">No NFTs created</h3>
+                      <p className="mt-1">When you create posts with NFTs, they'll appear here</p>
+                    </div>
                   )}
                 </TabsContent>
 

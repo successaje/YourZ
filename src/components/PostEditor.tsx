@@ -37,6 +37,7 @@ export default function PostEditor({
     coverImage: null,
     coverImagePreview: '',
     description: '',
+    supply: 1,
   })
 
   const [coinFormData, setCoinFormData] = useState<CoinFormData>({
@@ -57,6 +58,7 @@ export default function PostEditor({
         coverImage: null,
         coverImagePreview: '',
         description: '',
+        supply: 1,
       })
     }
   }
@@ -181,6 +183,7 @@ export default function PostEditor({
         coverImage: null,
         coverImagePreview: '',
         description: '',
+        supply: 1,
       })
       setCoinFormData({
         name: '',
@@ -268,6 +271,7 @@ export default function PostEditor({
                     })
                   }}
                   onDescriptionChange={(desc) => setNftFormData({...nftFormData, description: desc})}
+                  onSupplyChange={(supply) => setNftFormData({...nftFormData, supply})}
                 />
               )}
             </AnimatePresence>
@@ -424,7 +428,7 @@ export default function PostEditor({
             disabled={isLoading || !title || !content}
             className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Publishing...' : showNFTForm ? 'Publish as NFT' : 'Publish Post'}
+            {isLoading ? 'Publishing...' : showNFTForm ? 'Publish as NFT' : showCoinForm ? 'Publish with Coin' : 'Publish Post'}
           </button>
         </div>
       </form>

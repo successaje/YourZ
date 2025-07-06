@@ -4,6 +4,7 @@ export interface NFTFormData {
   coverImage: File | null;
   coverImagePreview: string;
   description: string;
+  supply: number;
 }
 
 export interface NFTMintResult {

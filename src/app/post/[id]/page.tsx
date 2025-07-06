@@ -2,18 +2,22 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { useAccount } from 'wagmi'
+import { useAccount, useChainId } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { toast } from 'react-hot-toast'
 import { formatDistanceToNow } from 'date-fns'
 import { motion } from 'framer-motion'
-import { FiArrowLeft, FiUser, FiPlus, FiX, FiExternalLink } from 'react-icons/fi'
+import { FiArrowLeft, FiUser, FiPlus, FiX, FiExternalLink, FiStar, FiUsers, FiTrendingUp } from 'react-icons/fi'
 import Link from 'next/link'
 import { useZora } from '@/hooks/useZora'
+import { useNFTMinting } from '@/hooks/useNFTMinting'
 import { getFromIPFS } from '@/lib/ipfs'
 import type { Post } from '@/types'
 import { Dialog } from '@headlessui/react'
 import { supabase } from '@/lib/supabase'
+import CoinModal from '@/components/CoinModal'
+import { NetworkSwitcher } from '@/components/NetworkSwitcher'
+import { baseSepoliaConfig } from '@/lib/networks'
 
 // Type for author information
 interface Author {
@@ -93,13 +97,17 @@ export default function PostPage() {
   const params = useParams<PostPageParams>()
   const { address } = useAccount()
   const { collectPost, resellPost } = useZora()
+  const { mintNFT, getNFTData, isMinting } = useNFTMinting()
+  const chainId = useChainId()
   
   const [post, setPost] = useState<DatabasePost | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isCollecting, setIsCollecting] = useState(false)
   const [isReselling, setIsReselling] = useState(false)
+  const [nftData, setNftData] = useState<any>(null)
   // Modal state
   const [showCoinModal, setShowCoinModal] = useState(false)
+  const [showCoinViewModal, setShowCoinViewModal] = useState(false)
   // Coin config state
   const [coinName, setCoinName] = useState('')
   const [coinSymbol, setCoinSymbol] = useState('')
@@ -165,6 +173,19 @@ export default function PostPage() {
             setCoinData(coin)
           }
         }
+
+        // Fetch NFT data if post is an NFT
+        if (dbPost.is_nft) {
+          const { data: nft, error: nftError } = await supabase
+            .from('post_nfts')
+            .select('*')
+            .eq('post_id', params.id)
+            .single()
+          
+          if (!nftError && nft) {
+            setNftData(nft)
+          }
+        }
         
         // Process the post data with proper typing
         const postData: DatabasePost = {
@@ -210,27 +231,41 @@ export default function PostPage() {
   }, [params?.id, router, address])
 
   const handleCollect = async () => {
-    if (!address || !post) {
-      toast.error('Please connect your wallet to collect this post')
+    if (!address || !post || !nftData) {
+      toast.error('Please connect your wallet to mint this NFT')
       return
     }
     
     try {
       setIsCollecting(true)
       
-      // Call the collectPost function from useZora hook
-      const result = await collectPost(post.id, address)
+      // Use the new minting functionality
+      const result = await mintNFT({
+        contractAddress: nftData.contract_address,
+        tokenId: nftData.token_id,
+        price: nftData.price?.toString() || '0',
+        maxSupply: nftData.max_supply,
+        currentSupply: nftData.current_supply,
+        postTitle: post.title,
+        postId: post.id
+      })
+
+      console.log('Mint result:', result)
       
-      if (result?.success && result.transactionHash) {
-        toast.success('Post collected successfully!')
-        // Refresh the page to show updated data
-        router.refresh()
+      if (result.success) {
+        if (result.transactionHash === 'redirected-to-zora') {
+          toast.success('Redirected to Zora! Complete your purchase there.')
+        } else {
+          toast.success('NFT minted successfully!')
+          // Refresh the page to show updated data
+          router.refresh()
+        }
       } else {
-        throw new Error('Failed to collect post')
+        throw new Error(result.error || 'Failed to mint NFT')
       }
     } catch (error) {
-      console.error('Error collecting post:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to collect post')
+      console.error('Error minting NFT:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to mint NFT')
     } finally {
       setIsCollecting(false)
     }
@@ -450,15 +485,24 @@ export default function PostPage() {
                     </span>
                     {coinData.name} ({coinData.symbol})
                   </h3>
-                  <Link
-                    href={`https://testnet.zora.co/coin/bsep:${coinData.contract_address}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-purple-600 bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
-                  >
-                    <FiExternalLink className="mr-2" />
-                    View on Zora
-                  </Link>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setShowCoinViewModal(true)}
+                      className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                    >
+                      <FiTrendingUp className="mr-2" />
+                      View Coin Details
+                    </button>
+                    <Link
+                      href={`https://testnet.zora.co/coin/bsep:${coinData.contract_address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center px-3 py-2 text-sm font-medium text-purple-600 bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
+                    >
+                      <FiExternalLink className="mr-2" />
+                      View on Zora
+                    </Link>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                   <div>
@@ -480,6 +524,11 @@ export default function PostPage() {
                     </p>
                   </div>
                 </div>
+                <div className="mt-4 pt-4 border-t border-yellow-200 dark:border-yellow-700">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    This post has an associated coin. Click "View Coin Details" to see trading activities, holders, and market data.
+                  </p>
+                </div>
               </div>
             )}
             
@@ -497,52 +546,210 @@ export default function PostPage() {
                 </div>
               </div>
             )}
-            
-            {post.is_nft && post.metadata?.nftMetadata && (
-              <div className="mt-8 p-6 bg-gray-50 rounded-lg">
-                <h3 className="text-lg font-medium mb-4">NFT Details</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {post.metadata.nftMetadata.tokenId && (
-                    <div>
-                      <p className="text-sm text-gray-500">Token ID</p>
-                      <p className="font-mono">{post.metadata.nftMetadata.tokenId}</p>
-                    </div>
-                  )}
-                  {post.metadata.nftMetadata.contractAddress && (
-                    <div>
-                      <p className="text-sm text-gray-500">Contract Address</p>
-                      <p className="font-mono">{post.metadata.nftMetadata.contractAddress}</p>
-                    </div>
-                  )}
-                  {post.metadata.nftMetadata.price && (
-                    <div>
-                      <p className="text-sm text-gray-500">Price</p>
-                      <p>{post.metadata.nftMetadata.price} ETH</p>
-                    </div>
-                  )}
+
+            {/* Support Creator Section - Show for posts without NFT or coin */}
+            {!post.is_nft && !coinData && (
+              <div className="mt-8 p-6 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FiStar className="w-6 h-6 text-white" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    Support This Creator
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    Help this creator continue making amazing content by becoming an early supporter
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <button
+                      onClick={() => setShowCoinModal(true)}
+                      disabled={!canCreateCoin}
+                      className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    >
+                      <FiPlus className="mr-2" />
+                      {canCreateCoin ? 'Create Coin for This Post' : 'Coin Already Created'}
+                    </button>
+                    <button
+                      className="inline-flex items-center justify-center px-4 py-2 border border-green-300 text-sm font-medium rounded-lg shadow-sm text-green-700 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200"
+                    >
+                      <FiUsers className="mr-2" />
+                      Follow Creator
+                    </button>
+                  </div>
                 </div>
-                <div className="mt-6 flex space-x-3">
+              </div>
+            )}
+            
+            {/* NFT Collection Section */}
+            {post.is_nft && nftData && (
+              <div className="mt-8 p-8 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-2xl border border-purple-200 dark:border-purple-800">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center">
+                      <FiStar className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900 dark:text-white">Collect This Post as NFT</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Become an early supporter and own this content</p>
+                    </div>
+                  </div>
+                  <div className="hidden md:flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+                    <FiUsers className="w-4 h-4" />
+                    <span>Early supporters get exclusive benefits</span>
+                  </div>
+                </div>
+
+                {/* Benefits Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-purple-100 dark:border-purple-800">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <FiStar className="w-4 h-4 text-yellow-500" />
+                      <span className="font-semibold text-gray-900 dark:text-white">Early Access</span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Get first access to future content and exclusive drops</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-purple-100 dark:border-purple-800">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <FiTrendingUp className="w-4 h-4 text-green-500" />
+                      <span className="font-semibold text-gray-900 dark:text-white">Value Growth</span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Support creators and potentially earn from content success</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-purple-100 dark:border-purple-800">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <FiUsers className="w-4 h-4 text-blue-500" />
+                      <span className="font-semibold text-gray-900 dark:text-white">Community</span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Join exclusive community of early supporters</p>
+                  </div>
+                </div>
+
+                {/* NFT Details */}
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-purple-100 dark:border-purple-800 mb-6">
+                  <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">NFT Details</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {nftData?.token_id && (
+                      <div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Token ID</p>
+                        <p className="font-mono text-gray-900 dark:text-white">{nftData.token_id}</p>
+                      </div>
+                    )}
+                    {nftData?.contract_address && (
+                      <div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Contract Address</p>
+                        <p className="font-mono text-sm text-gray-900 dark:text-white truncate">
+                          {nftData.contract_address}
+                        </p>
+                      </div>
+                    )}
+                    {nftData?.price && (
+                      <div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Price</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white">{nftData.price} ETH</p>
+                      </div>
+                    )}
+                    {nftData?.max_supply && (
+                      <div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Supply</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white">
+                          {nftData.current_supply || 0}/{nftData.max_supply}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Network Warning */}
+                {address && chainId && chainId !== baseSepoliaConfig.id && (
+                  <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center">
+                          <span className="text-white text-xs">⚠️</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                            Wrong Network
+                          </p>
+                          <p className="text-xs text-yellow-600 dark:text-yellow-300">
+                            Please switch to {baseSepoliaConfig.name} to mint this NFT
+                          </p>
+                        </div>
+                      </div>
+                      <NetworkSwitcher />
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-3">
                   <button
                     onClick={handleCollect}
-                    disabled={isCollecting || !address}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isMinting || isCollecting || !address || !nftData || (chainId && chainId !== baseSepoliaConfig.id)}
+                    className="flex-1 inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-lg shadow-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                   >
-                    {!address ? 'Connect Wallet' : isCollecting ? 'Processing...' : 'Collect NFT'}
+                    {!address ? (
+                      <>
+                        <FiUser className="mr-2" />
+                        Connect Wallet to Collect
+                      </>
+                    ) : chainId && chainId !== baseSepoliaConfig.id ? (
+                      <>
+                        <FiStar className="mr-2" />
+                        Switch to {baseSepoliaConfig.name}
+                      </>
+                    ) : isMinting || isCollecting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Minting NFT...
+                      </>
+                    ) : (
+                      <>
+                        <FiStar className="mr-2" />
+                        Mint NFT
+                      </>
+                    )}
                   </button>
                   
                   <button
                     onClick={handleResell}
                     disabled={isReselling || !address}
-                    className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center justify-center px-6 py-3 border border-purple-300 text-base font-medium rounded-lg shadow-sm text-purple-700 bg-white hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                   >
-                    {!address ? 'Connect Wallet' : isReselling ? 'Processing...' : 'Resell'}
+                    {!address ? 'Connect Wallet' : isReselling ? 'Processing...' : 'Resell NFT'}
                   </button>
+                  
+                  {nftData?.contract_address && (
+                    <a
+                      href={`https://testnet.zora.co/collect/bsep:${nftData.contract_address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center px-6 py-3 border border-gray-300 text-base font-medium rounded-lg shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+                    >
+                      <FiExternalLink className="mr-2" />
+                      View on Zora
+                    </a>
+                  )}
+                </div>
+
+                {/* Additional Info */}
+                <div className="mt-4 text-center">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    By collecting this NFT, you're supporting the creator and becoming part of their journey
+                  </p>
                 </div>
               </div>
             )}
           </div>
         </article>
       </div>
+
+      {/* Coin View Modal */}
+      <CoinModal
+        isOpen={showCoinViewModal}
+        onClose={() => setShowCoinViewModal(false)}
+        coin={coinData}
+      />
     </motion.div>
   )
 }

@@ -13,6 +13,7 @@ export interface NftMetadata {
   imageHash?: string
   price?: string
   royaltyBps?: string | number
+  supply?: number
 }
 
 export interface CoinMetadata {

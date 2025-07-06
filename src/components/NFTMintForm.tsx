@@ -22,6 +22,7 @@ interface NFTMintFormProps {
   onRoyaltyChange: (bps: string) => void
   onCoverImageChange: (file: File | null) => void
   onDescriptionChange: (description: string) => void
+  onSupplyChange: (supply: number) => void
 }
 
 export default function NFTMintForm({ 
@@ -31,7 +32,8 @@ export default function NFTMintForm({
   royaltyBps,
   onRoyaltyChange,
   onCoverImageChange,
-  onDescriptionChange
+  onDescriptionChange,
+  onSupplyChange
 }: NFTMintFormProps) {
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
@@ -129,8 +131,8 @@ export default function NFTMintForm({
             )}
           </div>
 
-          {/* Price and Royalty */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Price, Royalty, and Supply */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <label htmlFor="price" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Price (ETH)
@@ -182,6 +184,31 @@ export default function NFTMintForm({
               </div>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 0-10% of secondary sales
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="supply" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Max Supply
+              </label>
+              <div className="relative rounded-md shadow-sm">
+                <input
+                  type="number"
+                  name="supply"
+                  id="supply"
+                  min="1"
+                  max="10000"
+                  value={formData.supply || 1}
+                  onChange={(e) => onSupplyChange(Number(e.target.value))}
+                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white pl-3 pr-12 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-500 dark:focus:border-blue-500 sm:text-sm"
+                  placeholder="1"
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <span className="text-gray-500 dark:text-gray-400 sm:text-sm">NFTs</span>
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                1 = unique, 100+ = limited edition
               </p>
             </div>
           </div>

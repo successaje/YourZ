@@ -223,6 +223,14 @@ interface Create1155Options {
   walletClient: WalletClient;
 }
 
+interface Create1155Result {
+  contractAddress: `0x${string}`;
+  prepareMint: (params: {
+    quantityToMint: bigint;
+    minterAccount: `0x${string}`;
+  }) => Promise<{ parameters: any }>;
+}
+
 async function create1155WithSDK({
   name,
   symbol,
@@ -233,7 +241,7 @@ async function create1155WithSDK({
   account,
   publicClient,
   walletClient,
-}: Create1155Options): Promise<`0x${string}`> {
+}: Create1155Options): Promise<Create1155Result> {
   try {
     // 1. Create a properly formatted chain configuration for Zora SDK
     const zoraChainConfig = {
@@ -251,15 +259,14 @@ async function create1155WithSDK({
 
     // 2. Create creator client with proper typing
     const creatorClient = createCreatorClient({
-      chain: zoraChainConfig,
-      publicClient,
+      chain: zoraChainConfig as any,
+      publicClient: publicClient as any,
     });
 
-    // 3. Create the contract and get the transaction parameters
-    const { parameters, contractAddress } = await creatorClient.create1155({
+    // 3. Create the contract and get the transaction parameters with prepareMint
+    const { parameters, contractAddress, prepareMint } = await creatorClient.create1155({
       contract: {
         name,
-        symbol,
         uri: contractURI,
       },
       token: {
@@ -304,7 +311,12 @@ async function create1155WithSDK({
       }
       
       console.log('Contract deployed at:', receipt.contractAddress);
-      return receipt.contractAddress;
+      
+      // Return both contract address and prepareMint function
+      return {
+        contractAddress: receipt.contractAddress,
+        prepareMint
+      };
     } catch (error) {
       console.error('Error sending transaction:', error);
       throw error;
@@ -391,7 +403,7 @@ export async function create1155Contract({
     console.log('Token metadata uploaded to:', tokenMetadataURI);
 
     // 5. Deploy contract with the SDK
-    const contractAddress = await create1155WithSDK({
+    const { contractAddress } = await create1155WithSDK({
       name,
       symbol,
       contractURI: contractMetadataURI,
@@ -858,12 +870,14 @@ export async function deployZoraCoin({
       currency: _currency,
       mintFee: _mintFee,
       mintFeeRecipient: _mintFeeRecipient,
+      version: "v4",
     };
 
     // Deploy the coin - use the exact same pattern as TestZoraCoinSuite
     console.log('Deploying coin with params:', coinParams);
     console.log('Wallet client:', finalWalletClient);
     console.log('Public client:', finalPublicClient);
+
     
     
     const result = await createCoin(coinParams, finalWalletClient, finalPublicClient);
@@ -876,6 +890,7 @@ export async function deployZoraCoin({
     });
     
     console.log('Transaction receipt:', receipt);
+    console.log("Coin version: ", receipt.version)
     
     if (receipt.status !== 'success') {
       throw new Error('Coin deployment transaction failed');
@@ -909,294 +924,75 @@ export async function deployZoraCoin({
 }
 
 /**
- * Mints a new NFT on the specified Zora 1155 contract
+ * DEPRECATED: This function uses the old shared contract approach. 
+ * Using individual contracts per post now via createNFTDirectly in write/page.tsx
  * @param params Minting parameters
  * @returns The minting transaction receipt and token ID
  */
-export async function mintNFT({
-  name,
-  description,
-  content,
-  image,
-  quantity = 1,
-  price = '0.000777',
-  recipient,
-  contractAddress,
-  attributes = [],
-  tokenURI, // Optional: Allow passing tokenURI directly
-}: MintNFTParams): Promise<MintResult> {
-  try {
-    console.log('[mintNFT] Starting with params:', {
-      name,
-      description: description?.substring(0, 50) + (description?.length > 50 ? '...' : ''),
-      content: content?.substring(0, 50) + (content?.length > 50 ? '...' : ''),
-      image: image ? (image.substring(0, 50) + (image.length > 50 ? '...' : '')) : 'Not provided',
-      quantity,
-      price,
-      recipient,
-      contractAddress,
-      hasAttributes: attributes?.length > 0,
-      hasTokenURI: !!tokenURI,
-    });
-
-    // Validate required parameters
-    if (!name) throw new Error('Name is required');
-    if (!description) throw new Error('Description is required');
-    if (!content) throw new Error('Content is required');
-    if (!image) console.warn('No image provided, using default');
-    if (!recipient) throw new Error('Recipient address is required');
-    
-    // Get the connected account
-    let account: `0x${string}` | undefined;
-    try {
-      const accounts = await window.ethereum?.request({ method: 'eth_requestAccounts' });
-      account = accounts?.[0];
-      if (!account) {
-        throw new Error('No connected account found');
-      }
-    } catch (error) {
-      console.error('[mintNFT] Error connecting to wallet:', error);
-      return {
-        success: false,
-        error: `Wallet connection failed: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
-
-    // Use the provided contract address or the cached one
-    const targetContractAddress = (contractAddress || deployedContractAddress) as `0x${string}`;
-    if (!targetContractAddress) {
-      const error = 'No contract address provided and no deployed contract found';
-      console.error('[mintNFT]', error);
-      return { success: false, error };
-    }
-
-    console.log('[mintNFT] Using contract address:', targetContractAddress);
-
-    // Upload metadata to IPFS if tokenURI is not provided
-    let tokenMetadataURI = tokenURI;
-    if (!tokenMetadataURI) {
-      try {
-        console.log('[mintNFT] Uploading metadata to IPFS...');
-        const metadata = {
-          name,
-          description,
-          image: image || 'ipfs://bafybeihj5z3b2g4d4q4z4y5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q5q',
-          content,
-          attributes,
-          created: new Date().toISOString(),
-          external_url: 'https://yourz.xyz',
-        };
-
-        const response = await fetch('/api/upload-ipfs', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(metadata),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-
-        const data = await response.json();
-        tokenMetadataURI = data.url || data.hash || data.IpfsHash;
-        if (!tokenMetadataURI) {
-          throw new Error('No URL or hash returned from IPFS service');
-        }
-        
-        console.log('[mintNFT] Metadata uploaded to IPFS:', tokenMetadataURI);
-      } catch (error) {
-        console.error('[mintNFT] Error uploading metadata to IPFS:', error);
-        return {
-          success: false,
-          error: `Failed to upload metadata to IPFS: ${error instanceof Error ? error.message : String(error)}`,
-        };
-      }
-    }
-
-    // Create clients with proper error handling
-    let publicClient;
-    let walletClient;
-    
-    try {
-      publicClient = createPublicClient({
-        chain: baseSepoliaConfig,
-        transport: http(baseSepoliaConfig.rpcUrls.default.http[0], {
-          retryCount: 3,
-          retryDelay: 1000,
-          timeout: 30000
-        })
-      });
-
-      walletClient = createWalletClient({
-        chain: baseSepoliaConfig,
-        transport: custom((window as any).ethereum!)
-      });
-      
-      // Verify we can interact with the blockchain
-      const blockNumber = await publicClient.getBlockNumber();
-      console.log('[mintNFT] Connected to blockchain, current block:', blockNumber.toString());
-      
-      // Prepare the mint transaction
-      console.log('[mintNFT] Preparing mint transaction...');
-      const toAddress = recipient;
-      const tokenId = BigInt(1); // Using BigInt constructor for compatibility
-      const mintQuantity = BigInt(quantity || 1);
-      
-      // Mint the token
-      const mintTx = await walletClient.writeContract({
-        address: targetContractAddress as `0x${string}`,
-        abi: ZORA_1155_ABI,
-        functionName: 'mint',
-        args: [
-          toAddress,
-          tokenId,
-          mintQuantity,
-          '0x', // Empty data
-        ],
-        value: BigInt('777000000000000'), // 0.000777 ETH in wei
-        account,
-        chain: baseSepoliaConfig,
-      });
-      
-      console.log('[mintNFT] Transaction hash:', mintTx);
-      
-      // Wait for transaction receipt
-      const receipt = await publicClient.waitForTransactionReceipt({
-        hash: mintTx,
-        confirmations: 2,
-      });
-      
-      console.log('[mintNFT] Transaction confirmed:', receipt);
-      
-      // Get the token ID from the transaction receipt
-      const mintedTokenId = BigInt(1); // In a real implementation, you'd parse this from the transaction logs
-      
-      // Construct the token URI using the provided tokenURI or a default one
-      const tokenMetadataURI = tokenURI || `ipfs://${mintedTokenId}.json`;
-      
-      // Update the cache with the new token
-      if (cache) {
-        cache[targetContractAddress] = cache[targetContractAddress] || {};
-        cache[targetContractAddress][tokenId.toString()] = {
-          tokenId: tokenId.toString(),
-          tokenURI: tokenMetadataURI,
-          metadata: {
-            name: `Token #${tokenId}`,
-            description: `Token #${tokenId} minted on ${new Date().toISOString()}`,
-            image: `${tokenMetadataURI}/image.png`,
-          },
-        };
-      }
-      
-      return {
-        success: true,
-        transactionHash: mintTx,
-        tokenId: tokenId.toString(), // Convert BigInt to string to match the MintResult interface
-        contractAddress: targetContractAddress,
-        tokenMetadataURI,
-        receipt,
-      };
-    } catch (error) {
-      let errorMessage: string;
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      } else if (error && typeof error === 'object' && 'message' in error) {
-        errorMessage = String((error as any).message);
-      } else {
-        errorMessage = 'Failed to mint NFT';
-      }
-      
-      const errorDetails = error instanceof Error ? error.stack : '';
-      
-      console.error('[mintNFT] Error in minting process:', error);
-      return {
-        success: false,
-        error: errorMessage,
-        details: errorDetails,
-      };
-    }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to mint NFT';
-    console.error('Error in mintNFT:', errorMessage);
-    return {
-      success: false,
-      error: errorMessage,
-      details: error instanceof Error ? error.stack : undefined,
-    };
-  }
-}
+// export async function mintNFT({
+//   name,
+//   description,
+//   content,
+//   image,
+//   quantity = 1,
+//   price = '0.000777',
+//   recipient,
+//   contractAddress,
+//   attributes = [],
+//   tokenURI, // Optional: Allow passing tokenURI directly
+// }: MintNFTParams): Promise<MintResult> {
+      // DEPRECATED: Entire function body commented out - using individual contracts per post now
+    // try {
+    //   // ... entire function body commented out ...
+    // } catch (error) {
+    //   const errorMessage = error instanceof Error ? error.message : 'Failed to mint NFT';
+    //   console.error('Error in mintNFT:', errorMessage);
+    //   return {
+    //     success: false,
+    //     error: errorMessage,
+    //     details: error instanceof Error ? error.stack : undefined,
+    //   };
+    // }
+  // }
 
 /**
- * Deploys a new 1155 contract and mints an NFT in one operation
+ * DEPRECATED: This function uses the old mintNFT approach. 
+ * Using individual contracts per post now via createNFTDirectly in write/page.tsx
  * @param params Parameters for contract deployment and NFT minting
  * @returns The minting result including contract address and transaction details
  */
-export async function deployContractAndMint({
-  // Contract deployment params
-  name,
-  description = 'YourZ NFT Collection',
-  symbol = 'YOURZ',
-  royaltyBps = 100,
-  royaltyRecipient,
-  
-  // NFT minting params
-  content,
-  image,
-  quantity = 1,
-  price = '0.000777',
-  recipient,
-  attributes = [],
-}: Omit<Create1155ContractParams & Omit<MintNFTParams, 'contractAddress' | 'recipient'>, 'name'> & { 
-  name: string;
-  recipient?: `0x${string}`;
-}): Promise<MintResult & { contractDeployed: boolean }> {
-  try {
-    console.log('Starting contract deployment and minting...');
-    
-    // Deploy the contract first
-    const contractAddress = await create1155Contract({
-      name,
-      description,
-      symbol,
-      royaltyBps,
-      royaltyRecipient,
-    });
-    
-    console.log('Contract deployed successfully, now minting NFT...');
-    
-    // Then mint the NFT
-    const mintResult = await mintNFT({
-      name,
-      description,
-      content,
-      image,
-      quantity,
-      price,
-      recipient,
-      contractAddress,
-      attributes,
-    });
-    
-    return {
-      ...mintResult,
-      contractDeployed: true,
-    };
-  } catch (error) {
-    console.error('Error in deployContractAndMint:', error);
-    return {
-      success: false,
-      contractDeployed: false,
-      error: error instanceof Error ? error.message : 'Failed to deploy contract and mint NFT',
-      details: error instanceof Error ? error.stack : undefined,
-    };
-  }
-}
+// export async function deployContractAndMint({
+//   // Contract deployment params
+//   name,
+//   description = 'YourZ NFT Collection',
+//   symbol = 'YOURZ',
+//   royaltyBps = 100,
+//   royaltyRecipient,
+//   
+//   // NFT minting params
+//   content,
+//   image,
+//   quantity = 1,
+//   price = '0.000777',
+//   recipient,
+//   attributes = [],
+// }: Omit<Create1155ContractParams & Omit<MintNFTParams, 'contractAddress' | 'recipient'>, 'name'> & { 
+//   name: string;
+//   recipient?: `0x${string}`;
+// }): Promise<MintResult & { contractDeployed: boolean }> {
+      // DEPRECATED: Entire function body commented out - using individual contracts per post now
+    // try {
+    //   // ... entire function body commented out ...
+    // } catch (error) {
+    //   console.error('Error in deployContractAndMint:', error);
+    //   return {
+    //     success: false,
+    //     contractDeployed: false,
+    //     error: error instanceof Error ? error.message : 'Failed to deploy contract and mint NFT',
+    //     details: error instanceof Error ? error.stack : undefined,
+    //   };
+    // }
+  // }
 
 interface ContractDetails {
   name: string;

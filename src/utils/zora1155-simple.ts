@@ -136,6 +136,9 @@ export async function deployAnotherZora1155Contract({
 import { createCollectorClient } from '@zoralabs/protocol-sdk';
 import { writeContract, waitForTransactionReceipt } from '@wagmi/core';
 
+// Export the create1155 function for use in other files
+export { create1155 };
+
 export async function mintZora1155NFT({
   tokenId,
   quantity = 1,

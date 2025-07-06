@@ -6,6 +6,7 @@ import { baseSepolia } from 'viem/chains'
 import { uploadToIPFS } from '../utils/ipfs'
 import { deployZora1155Contract, deployAnotherZora1155Contract } from '../utils/zora1155-simple'
 import { NFT } from '@/types/nft'
+import { NFTService } from '@/services/nftService'
 
 export function useZora() {
   const { address } = useAccount()
@@ -111,70 +112,28 @@ export function useZora() {
     }
   }
 
-  const mintNFT = async ({
-    tokenId,
-    quantity = 1,
-    tokenURI,
-  }: {
-    tokenId: string
-    quantity?: number
-    tokenURI: string
-  }) => {
-    if (!address || !publicClient || !walletClient) {
-      throw new Error('Wallet not connected')
-    }
+  // DEPRECATED: This function uses the old shared contract. Using individual contracts per post now.
+  // const mintNFT = async ({
+  //   tokenId,
+  //   quantity = 1,
+  //   tokenURI,
+  // }: {
+  //   tokenId: string
+  //   quantity?: number
+  //   tokenURI: string
+  // }) => {
+          // DEPRECATED: Entire function body commented out - using individual contracts per post now
+      // if (!address || !publicClient || !walletClient) {
+      //   throw new Error('Wallet not connected')
+      // }
 
-    try {
-      const contractAddress = '0xD289FDef439d54eCb3a16d36A4b6B123A79DF9Bd' as `0x${string}`;
-      
-      console.log(`Minting ${quantity} of token ${tokenId} from ${contractAddress}`);
-      
-      // Prepare the mint transaction
-      const tx = await walletClient.writeContract({
-        address: contractAddress,
-        abi: [
-          {
-            inputs: [
-              { internalType: 'address', name: 'to', type: 'address' },
-              { internalType: 'uint256', name: 'tokenId', type: 'uint256' },
-              { internalType: 'uint256', name: 'amount', type: 'uint256' },
-              { internalType: 'bytes', name: 'data', type: 'bytes' },
-            ],
-            name: 'mint',
-            outputs: [],
-            stateMutability: 'nonpayable',
-            type: 'function',
-          },
-        ],
-        functionName: 'mint',
-        args: [
-          address, // to
-          BigInt(tokenId), // tokenId
-          BigInt(quantity), // amount
-          '0x', // data (empty for now)
-        ],
-      });
-      
-      // Wait for the transaction to be mined
-      const receipt = await publicClient.waitForTransactionReceipt({
-        hash: tx,
-      });
-      
-      if (receipt.status !== 'success') {
-        throw new Error('Transaction failed');
-      }
-      
-      return {
-        success: true,
-        transactionHash: tx,
-        tokenId,
-        contractAddress,
-      };
-    } catch (error) {
-      console.error('Error minting NFT:', error);
-      throw error;
-    }
-  }
+      // try {
+      //   // ... entire function body commented out ...
+      // } catch (error) {
+      //   console.error('Error minting NFT:', error);
+      //   throw error;
+      // }
+  // }
 
   const collectPost = async (postId: string, price: string) => {
     if (!address) {
@@ -197,6 +156,41 @@ export function useZora() {
       throw error
     }
   }
+
+  // DEPRECATED: This function uses the old shared contract. Using individual contracts per post now.
+  // const mintPostAsNFT = async ({
+  //   postId,
+  //   postTitle,
+  //   postContent,
+  //   postImage,
+  //   price,
+  //   maxSupply = 1,
+  //   description,
+  //   collectionName = 'YourZ Posts',
+  //   collectionDescription = 'Collection of minted posts from YourZ platform'
+  // }: {
+  //   postId: string
+  //   postTitle: string
+  //   postContent: string
+  //   postImage?: string
+  //   price: number
+  //   maxSupply?: number
+  //   description?: string
+  //   collectionName?: string
+  //   collectionDescription?: string
+  // }) => {
+  //   // DEPRECATED: Entire function body commented out - using individual contracts per post now
+  //   // if (!address || !publicClient || !walletClient) {
+  //   //   throw new Error('Wallet not connected')
+  //   // }
+
+  //   // try {
+  //   //   // ... entire function body commented out ...
+  //   // } catch (error) {
+  //   //   console.error('Error minting post as NFT:', error);
+  //   //   throw error;
+  //   // }
+  // }
 
   const fetchAllNFTs = useCallback(async (): Promise<NFT[]> => {
     if (!publicClient) return []
@@ -633,7 +627,9 @@ export function useZora() {
 
   return {
     createNFT,
-    mintNFT,
+    // DEPRECATED: mintNFT and mintPostAsNFT use old shared contract - using individual contracts per post now
+    // mintNFT,
+    // mintPostAsNFT,
     collectPost,
     fetchAllNFTs,
     fetchNFTDetails,
