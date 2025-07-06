@@ -12,7 +12,7 @@ interface NFTCardProps {
 export default function NFTCard({ nft }: NFTCardProps) {
   const { address } = useAccount()
   const isOwner = address?.toLowerCase() === nft.owner.address.toLowerCase()
-  const priceInEth = parseFloat(nft.price) ? formatEther(BigInt(nft.price)) : '0'
+  const priceInEth = nft.price || '0'
 
   return (
     <motion.div 

@@ -118,6 +118,22 @@ export default function Navigation() {
                       Test NFT Contract & Minting
                     </Link>
                     <Link
+                      href="/test/mint"
+                      className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      role="menuitem"
+                      onClick={() => setIsExploreOpen(false)}
+                    >
+                      Test NFT Minting
+                    </Link>
+                    <Link
+                      href="/test/coin"
+                      className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      role="menuitem"
+                      onClick={() => setIsExploreOpen(false)}
+                    >
+                      Test Zora Coin
+                    </Link>
+                    <Link
                       href="/faqs"
                       className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                       role="menuitem"

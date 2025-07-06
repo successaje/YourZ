@@ -3,12 +3,12 @@
 import { useState, useMemo } from 'react';
 import { mintZora1155NFT } from '@/utils/zora1155-simple';
 import { deployZora1155Contract, deployAnotherZora1155Contract } from '@/utils/zora1155-simple';
-import { uploadToIPFS } from '@/utils/ipfs';
-import { useAccount, useWalletClient, usePublicClient, useConfig, useChainId } from 'wagmi';
+import { uploadToIPFS } from '@/lib/ipfs';
+import { useAccount, useWriteContract, useWalletClient, usePublicClient, useConfig, useChainId } from 'wagmi';
 import { parseEther, type Address, createWalletClient, createPublicClient } from 'viem';
 import { toast } from 'react-hot-toast';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { writeContract, waitForTransactionReceipt } from "@wagmi/core";
+import { waitForTransactionReceipt } from "@wagmi/core";
 
 type MintParams = {
   name: string;
@@ -35,6 +35,7 @@ const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => 
   // const { data: walletClient } = useWalletClient();
   const walletClient = useWalletClient();
   const config = useConfig();
+  const { writeContractAsync } = useWriteContract();
   
   // Component state
   const [contractAddress, setContractAddress] = useState<string>('');
@@ -74,7 +75,7 @@ const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => 
     setIsLoading(true);
     setStatus('Deploying contract...');
     try {
-      const { contractAddress, parameters } = await deployAnotherZora1155Contract({
+      const { parameters, contractAddress } = await deployAnotherZora1155Contract({
         name: formData.name,
         description: formData.description,
         image: formData.image,
@@ -84,21 +85,22 @@ const ConnectedTestNFTSuite = ({ initialTab = 'deploy' }: TestNFTSuiteProps) => 
         uploadJsonToIpfs: uploadToIPFS,
       });
 
-      // console.log("Loading params to simulate.....")
-
-      // const { request } = await publicClient.simulateContract(parameters)
+      console.log("Sending transaction with parameters:", parameters);
       
-      // console.log("Param here: ", request)
-
-      // const hash = await walletClient.writeContract(request)
-
-      const hash = await writeContract(config, parameters)
+      // Use the writeContractAsync function from the hook
+      const hash = await writeContractAsync(parameters);
+      console.log("Transaction hash:", hash);
+      
+      // Wait for the transaction to be mined
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      console.log("Transaction receipt:", receipt);
+      console.log("Hash here: ", hash)
 
       // Transaction receipt
-      const receipt = await waitForTransactionReceipt(config, { hash });
-      console.log('Transaction receipt:', receipt);
-      const explorerLink = `https://sepolia.basescan.org/tx/${receipt.transactionHash}`
-      console.log("Explorer link here: ", explorerLink);
+      // const receipt = await waitForTransactionReceipt(, { hash });
+      // console.log('Transaction receipt:', receipt);
+      // const explorerLink = `https://sepolia.basescan.org/tx/${receipt.transactionHash}`
+      // console.log("Explorer link here: ", explorerLink);
       
       setContractAddress(contractAddress);
       setStatus('Contract deployed!');

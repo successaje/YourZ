@@ -10,7 +10,7 @@ const baseSepoliaWithConfig = baseSepoliaConfig
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || ''
 
-// Configure chains - including Zora and Base networks
+// Configure chains - including Zora and Base Sepolia (where your contract is)
 export const allChains = [mainnet, sepolia, zora, baseSepoliaWithConfig] as const
 
 // Create wagmi config

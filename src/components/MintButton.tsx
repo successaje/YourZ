@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useZoraMint } from '@/hooks/useZoraMint';
-import { Button } from './ui/button';
 import { Loader2 } from 'lucide-react';
 
 interface MintButtonProps {
@@ -22,17 +21,20 @@ export function MintButton({ tokenURI, tokenName, className }: MintButtonProps) 
 
   if (mintSuccess) {
     return (
-      <Button disabled className={className}>
+      <button 
+        disabled 
+        className={`px-4 py-2 bg-gray-300 text-gray-500 rounded-md cursor-not-allowed ${className || ''}`}
+      >
         Minted! 🎉
-      </Button>
+      </button>
     );
   }
 
   return (
-    <Button 
+    <button 
       onClick={handleMint} 
       disabled={isMinting}
-      className={className}
+      className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${className || ''}`}
     >
       {isMinting ? (
         <>
@@ -42,6 +44,6 @@ export function MintButton({ tokenURI, tokenName, className }: MintButtonProps) 
       ) : (
         `Mint ${tokenName}`
       )}
-    </Button>
+    </button>
   );
 }

@@ -13,6 +13,15 @@ export interface NftMetadata {
   imageHash?: string
   price?: string
   royaltyBps?: string | number
+  supply?: number
+}
+
+export interface CoinMetadata {
+  symbol: string
+  mintFee?: string
+  contractAddress?: string
+  txHash?: string
+  image?: File
 }
 
 export interface PostMetadata {
@@ -29,6 +38,7 @@ export interface PostMetadata {
   }
   tags?: string[]
   nftMetadata?: NftMetadata
+  coinMetadata?: CoinMetadata
   [key: string]: any // Allow additional properties
 }
 
