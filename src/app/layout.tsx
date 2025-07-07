@@ -4,7 +4,6 @@ import { Providers } from './providers'
 import Header from '../components/Header'
 import { Toaster } from 'react-hot-toast'
 import { Space_Grotesk } from 'next/font/google'
-import Navigation from '@/components/Navigation'
 import { ThemeProvider } from 'next-themes'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -31,9 +30,10 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <Providers>
             <div className="flex flex-col min-h-screen">
-              <Navigation />
               <Header />
-              {children}
+              <main className="flex-1 pt-20">
+                {children}
+              </main>
             </div>
             <Toaster position="top-right" />
           </Providers>

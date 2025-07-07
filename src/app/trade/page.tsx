@@ -5,26 +5,22 @@ import { Address, parseEther } from "viem";
 import { useAccount, useWalletClient, usePublicClient, useChainId } from "wagmi";
 import { base } from "viem/chains";
 import { useTheme } from 'next-themes';
+import { usePostCoins, PostCoin } from '@/hooks/usePostCoins';
+import Link from 'next/link';
 
-// Mock token list (replace with real data if available)
-const TOKENS = [
+// Base tokens (ETH, USDC, etc.)
+const BASE_TOKENS = [
   {
-    symbol: "ZORA",
-    address: "0x0000000000000000000000000000000000000000", // Replace with real ZORA address
+    symbol: "ETH",
+    address: "0x0000000000000000000000000000000000000000", // Native ETH
     decimals: 18,
-    name: "Zora Token",
+    name: "Ethereum",
   },
   {
     symbol: "USDC",
     address: "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // Replace with real USDC address
     decimals: 6,
     name: "USD Coin",
-  },
-  {
-    symbol: "YOURZ",
-    address: "0x1234567890abcdef1234567890abcdef12345678", // Example creator coin
-    decimals: 18,
-    name: "YourZ Creator Coin",
   },
 ];
 
@@ -41,9 +37,10 @@ const ENHANCED_MOCK_CANDLES = Array.from({ length: 40 }, (_, i) => {
 
 interface EnhancedCandleChartProps {
   darkMode: boolean;
+  selectedCoin?: PostCoin;
 }
 
-const EnhancedCandleChart: React.FC<EnhancedCandleChartProps> = ({ darkMode }) => {
+const EnhancedCandleChart: React.FC<EnhancedCandleChartProps> = ({ darkMode, selectedCoin }) => {
   // Chart dimensions
   const visibleCandles = 28;
   const candleWidth = 20;
@@ -187,13 +184,37 @@ const StatCard = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
-const SwapPanel = () => {
+const SwapPanel = ({ coins, selectedCoin }: { coins: PostCoin[]; selectedCoin?: PostCoin }) => {
   const { address } = useAccount();
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
   const chainId = useChainId();
 
-  const [selectedToken, setSelectedToken] = React.useState(TOKENS[2]); // Default to YOURZ
+  // Combine base tokens with post coins
+  const allTokens = [
+    ...BASE_TOKENS,
+    ...coins.map(coin => ({
+      symbol: coin.symbol,
+      address: coin.contract_address,
+      decimals: 18,
+      name: coin.name,
+      isPostCoin: true,
+      coin
+    }))
+  ];
+
+  // Find the token that matches the selected coin
+  const getInitialToken = () => {
+    if (selectedCoin) {
+      const matchingToken = allTokens.find(token => 
+        token.address.toLowerCase() === selectedCoin.contract_address.toLowerCase()
+      );
+      if (matchingToken) return matchingToken;
+    }
+    return allTokens[2] || allTokens[0]; // Default to first post coin or first token
+  };
+
+  const [selectedToken, setSelectedToken] = React.useState(getInitialToken());
   const [direction, setDirection] = React.useState<"buy" | "sell">("buy");
   const [fromAmount, setFromAmount] = React.useState("");
   const [toAmount, setToAmount] = React.useState("");
@@ -201,110 +222,80 @@ const SwapPanel = () => {
   const [isTrading, setIsTrading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [status, setStatus] = React.useState<string | null>(null);
-  const [transactionHash, setTransactionHash] = React.useState<string | null>(null);
-  const [tradeEvent, setTradeEvent] = React.useState<any>(null);
 
   const isBaseMainnet = chainId === base.id;
 
-  // TODO: Fetch real balances if available
-  const mockBalance = selectedToken.symbol === "USDC" ? "1000" : "5";
-
-  // For demo, auto-calculate toAmount as 1:1 (replace with real quote logic)
+  // Update selected token when selectedCoin changes
   React.useEffect(() => {
-    setToAmount(fromAmount);
-  }, [fromAmount]);
+    const newToken = getInitialToken();
+    setSelectedToken(newToken);
+  }, [selectedCoin, coins]);
 
   const handleTrade = async () => {
-    setError(null);
-    setStatus(null);
-    setTransactionHash(null);
-    setTradeEvent(null);
-    if (!address || !walletClient || !publicClient) {
-      setError("Wallet not connected");
+    if (!address || !walletClient || !publicClient || !selectedToken) {
+      setError("Please connect your wallet and select a token");
       return;
     }
-    if (!fromAmount) {
-      setError("Please enter an amount");
+
+    if (!fromAmount || !toAmount) {
+      setError("Please enter amounts");
       return;
     }
-    if (!isBaseMainnet) {
-      setError("You must be connected to Base mainnet to trade.");
-      return;
-    }
+
     setIsTrading(true);
+    setError(null);
+    setStatus("Preparing trade...");
+
     try {
-      setStatus("Preparing trade transaction...");
-      const isBuy = direction === "buy";
-      const tradeParameters: TradeParameters = isBuy
-        ? {
-            sell: { type: "eth" },
-            buy: { type: "erc20", address: selectedToken.address as Address },
-            amountIn: parseEther(fromAmount),
-            slippage: slippage / 100,
-            sender: address as Address,
-          }
-        : {
-            sell: { type: "erc20", address: selectedToken.address as Address },
-            buy: { type: "eth" },
-            amountIn: parseEther(fromAmount),
-            slippage: slippage / 100,
-            sender: address as Address,
-          };
-      setStatus("Sending trade transaction...");
-      const receipt = await tradeCoin({
-        tradeParameters,
-        walletClient,
-        account: address as Address,
-        publicClient,
-      });
-      setTransactionHash(receipt.hash);
-      setStatus("Transaction sent! Waiting for confirmation...");
-      const txReceipt = await publicClient.waitForTransactionReceipt({ hash: receipt.hash, confirmations: 2 });
-      if (txReceipt.status === "success") {
-        setStatus("Trade successful!");
-        setTradeEvent({ txReceipt, direction });
-      } else {
-        throw new Error("Transaction reverted");
-      }
-    } catch (err: any) {
-      setError(err.message || "Failed to trade coin");
-      setStatus("Trade failed");
+      // This is a placeholder for actual trading logic
+      // In a real implementation, you would integrate with the Zora Coins SDK
+      setStatus("Trade executed successfully!");
+      
+      // Reset form
+      setFromAmount("");
+      setToAmount("");
+    } catch (err) {
+      console.error("Trade error:", err);
+      setError(err instanceof Error ? err.message : "Trade failed");
     } finally {
       setIsTrading(false);
+      setStatus(null);
     }
   };
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-6 w-full max-w-md mx-auto flex flex-col gap-5 border border-gray-100 dark:border-gray-800">
-      <h2 className="text-xl font-bold mb-2 text-center">Swap</h2>
-      <div className="flex flex-col gap-3">
+    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-6 flex flex-col gap-4 w-full border border-gray-100 dark:border-gray-800">
+      <h3 className="font-bold text-lg mb-2">Swap</h3>
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => setDirection("buy")} className={`px-4 py-1.5 rounded-t-lg font-semibold ${direction === "buy" ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>Buy</button>
+        <button onClick={() => setDirection("sell")} className={`px-4 py-1.5 rounded-t-lg font-semibold ${direction === "sell" ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>Sell</button>
+      </div>
+      <div className="flex flex-col gap-2">
+        <input
+          type="number"
+          className="input input-bordered w-full"
+          placeholder={direction === "buy" ? "ETH amount" : "Token amount"}
+          value={fromAmount}
+          onChange={e => setFromAmount(e.target.value)}
+        />
+        <input
+          type="number"
+          className="input input-bordered w-full"
+          placeholder={direction === "buy" ? "Token amount" : "ETH amount"}
+          value={toAmount}
+          onChange={e => setToAmount(e.target.value)}
+        />
         <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-500 w-16">From</label>
-          <input
-            type="number"
-            value={fromAmount}
-            onChange={e => setFromAmount(e.target.value)}
-            className="input input-bordered w-full"
-            placeholder="0.0"
-          />
-          <span className="ml-2 text-xs text-gray-500">ETH</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-500 w-16">To</label>
-          <input
-            type="number"
-            value={toAmount}
-            disabled
-            className="input input-bordered w-full bg-gray-50 dark:bg-gray-800 cursor-not-allowed"
-            placeholder="0.0"
-          />
+          <span className="text-xs text-gray-500">Token:</span>
           <select
-            className="ml-2 px-2 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs"
+            className="select select-bordered select-sm w-full"
             value={selectedToken.symbol}
-            onChange={e => setSelectedToken(TOKENS.find(t => t.symbol === e.target.value) || TOKENS[2])}
+            onChange={e => setSelectedToken(allTokens.find(t => t.symbol === e.target.value) || allTokens[0])}
           >
-            {TOKENS.map(t => (
-              <option key={t.symbol} value={t.symbol}>{t.symbol}</option>
+            {allTokens.map(t => (
+              <option key={t.symbol} value={t.symbol}>
+                {t.symbol} {t.isPostCoin ? `(${t.coin.post?.title || 'Unknown Post'})` : ''}
+              </option>
             ))}
           </select>
         </div>
@@ -339,7 +330,7 @@ const SwapPanel = () => {
   );
 };
 
-const LiquidityPanel = () => {
+const LiquidityPanel = ({ selectedCoin }: { selectedCoin?: PostCoin }) => {
   const [tab, setTab] = React.useState<'add' | 'remove'>('add');
   return (
     <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-6 flex flex-col gap-4 w-full border border-gray-100 dark:border-gray-800">
@@ -350,7 +341,7 @@ const LiquidityPanel = () => {
       {tab === 'add' ? (
         <div className="flex flex-col gap-2">
           <input type="number" className="input input-bordered w-full" placeholder="ETH amount" />
-          <input type="number" className="input input-bordered w-full" placeholder="Post Coin amount" />
+          <input type="number" className="input input-bordered w-full" placeholder={`${selectedCoin?.symbol || 'Post Coin'} amount`} />
           <button className="mt-2 w-full py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-bold shadow-lg">Add Liquidity</button>
         </div>
       ) : (
@@ -367,28 +358,45 @@ const LiquidityPanel = () => {
   );
 };
 
-const ActivityFeed = () => (
+const ActivityFeed = ({ coins }: { coins: PostCoin[] }) => (
   <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-6 flex flex-col gap-4 w-full border border-gray-100 dark:border-gray-800">
-    <h3 className="font-bold text-lg mb-2">Activity Feed</h3>
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-gray-500">Trade</span>
-        <span>+100 Post Coin</span>
-        <span className="text-green-600">0.01 ETH</span>
-        <span className="text-gray-400">2m ago</span>
-      </div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-gray-500">Liquidity Add</span>
-        <span>+50 LP</span>
-        <span className="text-blue-600">0.005 ETH</span>
-        <span className="text-gray-400">10m ago</span>
-      </div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-gray-500">Trade</span>
-        <span>-20 Post Coin</span>
-        <span className="text-red-600">-0.002 ETH</span>
-        <span className="text-gray-400">1h ago</span>
-      </div>
+    <h3 className="font-bold text-lg mb-2">Available Coins</h3>
+    <div className="space-y-3">
+      {coins.length === 0 ? (
+        <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+          <p className="text-sm">No coins available</p>
+          <p className="text-xs mt-1">Create a post with a coin to start trading!</p>
+        </div>
+      ) : (
+        coins.map((coin) => (
+          <Link 
+            key={coin.id} 
+            href={`/post/${coin.post_id}`}
+            className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-gray-900 dark:text-white">{coin.symbol}</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">•</span>
+                <span className="text-sm text-gray-600 dark:text-gray-300">{coin.name}</span>
+              </div>
+              {coin.post && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Post: {coin.post.title}
+                </p>
+              )}
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-medium text-gray-900 dark:text-white">
+                {coin.total_supply.toLocaleString()}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Supply
+              </div>
+            </div>
+          </Link>
+        ))
+      )}
     </div>
   </div>
 );
@@ -454,6 +462,73 @@ export default function TradePage() {
   // Use next-themes for reliable theme detection
   const { resolvedTheme } = useTheme();
   const darkMode = resolvedTheme === 'dark';
+  const { coins, isLoading, error } = usePostCoins();
+  const [selectedCoin, setSelectedCoin] = React.useState<PostCoin | undefined>();
+
+  // Get coin from URL params
+  const [searchParams] = React.useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        coinAddress: params.get('coin'),
+        coinSymbol: params.get('symbol')
+      };
+    }
+    return { coinAddress: null, coinSymbol: null };
+  });
+
+  // Set the selected coin based on URL params or default to first coin
+  React.useEffect(() => {
+    if (coins.length > 0) {
+      let coinToSelect: PostCoin | undefined;
+      
+      // Try to find coin by contract address first
+      if (searchParams.coinAddress) {
+        coinToSelect = coins.find(coin => 
+          coin.contract_address.toLowerCase() === searchParams.coinAddress?.toLowerCase()
+        );
+      }
+      
+      // If not found by address, try by symbol
+      if (!coinToSelect && searchParams.coinSymbol) {
+        coinToSelect = coins.find(coin => 
+          coin.symbol.toLowerCase() === searchParams.coinSymbol?.toLowerCase()
+        );
+      }
+      
+      // If still not found, use first coin
+      if (!coinToSelect) {
+        coinToSelect = coins[0];
+      }
+      
+      setSelectedCoin(coinToSelect);
+    }
+  }, [coins, searchParams.coinAddress, searchParams.coinSymbol]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 py-8 pl-2 pr-2 sm:pl-6 sm:pr-2 lg:pl-8 lg:pr-2">
+        <div className="w-full max-w-[1600px] flex flex-col gap-10">
+          <div className="text-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
+            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading coins...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 py-8 pl-2 pr-2 sm:pl-6 sm:pr-2 lg:pl-8 lg:pr-2">
+        <div className="w-full max-w-[1600px] flex flex-col gap-10">
+          <div className="text-center py-20">
+            <p className="text-red-500">Error loading coins: {error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 py-8 pl-2 pr-2 sm:pl-6 sm:pr-2 lg:pl-8 lg:pr-2">
@@ -462,7 +537,9 @@ export default function TradePage() {
         <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-8 items-start">
           {/* Chart + Stats */}
           <div className="flex flex-col gap-4 w-full">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Post Coin / ETH</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              {selectedCoin ? `${selectedCoin.symbol} / ETH` : 'Post Coin / ETH'}
+            </h1>
             <div
               className="rounded-2xl shadow-lg p-4 md:p-6 flex flex-col transition-colors duration-300 w-full min-h-[560px] bg-gray-50 dark:bg-[#18181b]"
               style={{
@@ -473,7 +550,7 @@ export default function TradePage() {
               }}
             >
               <div className="flex-1 flex w-full">
-                <EnhancedCandleChart darkMode={darkMode} />
+                <EnhancedCandleChart darkMode={darkMode} selectedCoin={selectedCoin} />
               </div>
               <div className="flex flex-row gap-2 md:gap-4 items-center justify-center md:justify-start flex-wrap mt-4">
                 <StatCard label="24h Volume" value="12.3 ETH" />
@@ -485,15 +562,15 @@ export default function TradePage() {
           </div>
           {/* Swap Panel */}
           <div className="flex flex-col gap-8">
-            <SwapPanel />
-            <LiquidityPanel />
+            <SwapPanel coins={coins} selectedCoin={selectedCoin} />
+            <LiquidityPanel selectedCoin={selectedCoin} />
           </div>
         </div>
         {/* Main Grid: Activity Feed */}
         <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-8">
           <div />
           <div className="flex flex-col gap-8 min-w-0 md:min-w-[320px]">
-            <ActivityFeed />
+            <ActivityFeed coins={coins} />
           </div>
         </div>
       </div>

@@ -563,7 +563,7 @@ export default function WritePage() {
           })
 
           console.log('✅ Coin deployed successfully:', coinContractAddress)
-          console.log('💾 Saving coin to database with creator_id:', userId)
+          console.log('💾 Saving coin to database with creator_id:', address.toLowerCase())
           
           // Save coin to post_coins table
           const { error: coinError } = await supabase
@@ -574,7 +574,7 @@ export default function WritePage() {
               name: coinMetadata.name,
               symbol: metadata.coinMetadata.symbol,
               total_supply: 1000000,
-              creator_id: userId, // Use the UUID from users table
+              creator_id: address.toLowerCase(), // Use wallet address as text
               metadata_uri: metadataUri,
               created_at: new Date().toISOString(),
             })

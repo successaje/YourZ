@@ -54,6 +54,8 @@ export default function PostPage() {
 
   useEffect(() => {
     const fetchPost = async () => {
+      if (!params?.id) return
+      
       try {
         // First, try to get the post with likes and bookmarks
         const { data, error } = await supabase
@@ -113,20 +115,23 @@ export default function PostPage() {
       }
     }
 
-    if (params.id) {
-      fetchPost()
-    }
-  }, [params.id])
+    fetchPost()
+  }, [params?.id])
+
+  // Set current user address when wallet is connected
+  useEffect(() => {
+    setCurrentUserAddress(address)
+  }, [address])
 
   const handleLike = async () => {
-    if (!post) return
+    if (!post || !address) return
 
     try {
       const { error } = await supabase
         .from('post_likes')
         .upsert({
           post_id: post.id,
-          user_address: post.address,
+          user_address: address,
           created_at: new Date().toISOString()
         })
 
@@ -146,14 +151,14 @@ export default function PostPage() {
   }
 
   const handleBookmark = async () => {
-    if (!post) return
+    if (!post || !address) return
 
     try {
       const { error } = await supabase
         .from('post_bookmarks')
         .upsert({
           post_id: post.id,
-          user_address: post.address,
+          user_address: address,
           created_at: new Date().toISOString()
         })
 

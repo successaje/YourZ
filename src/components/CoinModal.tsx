@@ -281,10 +281,13 @@ export default function CoinModal({ isOpen, onClose, coin }: CoinModalProps) {
                         <FaExternalLinkAlt className="w-4 h-4 mr-2" />
                         View on BaseScan
                       </a>
-                      <button className="inline-flex items-center px-4 py-2 bg-white text-blue-600 rounded-lg hover:bg-gray-100 transition-colors">
+                      <a
+                        href={`/trade?coin=${coin.contract_address}&symbol=${coin.symbol}`}
+                        className="inline-flex items-center px-4 py-2 bg-white text-blue-600 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
                         <Coins className="w-4 h-4 mr-2" />
                         Trade
-                      </button>
+                      </a>
                     </div>
                   </div>
                 </div>
