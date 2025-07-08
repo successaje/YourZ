@@ -2,7 +2,7 @@
 
 import { useAccount } from 'wagmi';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, Suspense } from 'react';
 import { PlaceholderAvatar } from '@/components/PlaceholderAvatar';
 import Link from 'next/link';
 import { 
@@ -25,7 +25,7 @@ import NFTCard from '@/components/NFTCard';
 
 // Function to strip HTML tags from content
 const stripHtml = (html: string) => {
-  if (typeof document !== 'undefined') {
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     return doc.body.textContent || '';
   }
@@ -107,8 +107,17 @@ const getMethod = (tx) => {
 const Copyable = ({ text, truncate = 6 }) => {
   const [copied, setCopied] = useState(false);
   const short = text.length > 2 * truncate ? `${text.slice(0, truncate)}...${text.slice(-truncate)}` : text;
+  
+  const handleCopy = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1000);
+    }
+  };
+  
   return (
-    <span className="inline-flex items-center gap-1 cursor-pointer group" onClick={() => {navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false), 1000);}}>
+    <span className="inline-flex items-center gap-1 cursor-pointer group" onClick={handleCopy}>
       <span className="font-mono text-xs group-hover:underline">{short}</span>
       {copied ? <FaCheck className="text-green-500 w-3 h-3" /> : <FaCopy className="text-gray-400 w-3 h-3 group-hover:text-blue-500" />}
     </span>
@@ -200,7 +209,20 @@ const PostCard = ({ post }: { post: PostType }) => {
   );
 };
 
-export default function ProfilePage() {
+// Loading component for Suspense fallback
+const ProfileLoading = () => (
+  <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="container mx-auto px-4 py-8">
+      <div className="animate-pulse">
+        <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-lg mb-8"></div>
+        <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+      </div>
+    </div>
+  </div>
+);
+
+// Main profile component that uses useSearchParams
+function ProfileContent() {
   const { address: connectedAddress, isConnected } = useAccount();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -834,5 +856,13 @@ export default function ProfilePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<ProfileLoading />}>
+      <ProfileContent />
+    </Suspense>
   );
 }
