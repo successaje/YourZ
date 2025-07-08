@@ -62,6 +62,7 @@ export default function Header() {
   const handleRegistrationSuccess = () => {
     setShowRegistration(false)
     setIsRegistered(true)
+    // The modal will handle the routing to profile page
   }
 
   const isActive = (path: string) => pathname === path
